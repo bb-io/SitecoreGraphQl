@@ -1,0 +1,8 @@
+{
+  "ConnectionDefinition": {
+    "baseUrl": "https://cm.example.com",
+    "clientId": "your-client-id",
+    "clientSecret": "your-client-secret"
+  },
+  "TestFolder": "TestFiles"
+}
