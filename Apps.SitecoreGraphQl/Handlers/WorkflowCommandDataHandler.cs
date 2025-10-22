@@ -21,7 +21,7 @@ public class WorkflowCommandDataHandler(InvocationContext invocationContext, [Ac
             throw new ArgumentException("Please provide first an Item ID first to retrieve workflow commands.");
         }
         
-        var item = await GetItemAsync(itemRequest.ItemId);
+        var item = await GetItemAsync(itemRequest);
         if (item.WorkflowInfo?.Workflow?.WorkflowId == null || item.WorkflowInfo?.WorkflowState?.WorkflowStateId == null)
         {
             return new List<DataSourceItem>();
@@ -33,12 +33,12 @@ public class WorkflowCommandDataHandler(InvocationContext invocationContext, [Ac
         return commands.Select(cmd => new DataSourceItem(cmd.CommandId, cmd.DisplayName));
     }
 
-    private async Task<ItemResponse> GetItemAsync(string itemId)
+    private async Task<ItemResponse> GetItemAsync(ItemRequest itemRequest)
     {
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {
-                query = GraphQlQueries.GetItemByIdQuery(itemId)
+                query = GraphQlQueries.GetItemByIdQuery(itemRequest)
             });
 
         var item = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(apiRequest);

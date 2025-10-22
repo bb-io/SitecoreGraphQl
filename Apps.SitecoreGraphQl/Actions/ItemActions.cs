@@ -20,7 +20,7 @@ public class ItemActions(InvocationContext invocationContext) : Invocable(invoca
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {
-                query = GraphQlQueries.GetItemByIdQuery(itemRequest.GetItemId())
+                query = GraphQlQueries.GetItemByIdQuery(itemRequest)
             });
 
         var item = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(apiRequest);

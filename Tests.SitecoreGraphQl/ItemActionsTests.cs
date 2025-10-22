@@ -21,6 +21,24 @@ public class ItemActionsTests : TestBase
         Assert.IsNotNull(result.ItemId);
         PrintObject(result);
     }
+    
+    [TestMethod]
+    public async Task GetItem_ValidIdLanguageAndVersion_Success()
+    {
+        var itemActions = new ItemActions(InvocationContext);
+        var itemRequest = new Apps.SitecoreGraphQl.Models.Requests.ItemRequest
+        {
+            ItemId = "{A6D76C0C-5CC9-4AE1-BD63-E3B6DADAAFA8}",
+            Language = "en",
+            Version = 1
+        };
+        
+        var result = await itemActions.GetItem(itemRequest);
+        
+        Assert.IsNotNull(result);
+        Assert.IsNotNull(result.ItemId);
+        PrintObject(result);
+    }
 
     [TestMethod]
     public async Task GetItem_NotExistingId_ThrowApplicationException()
