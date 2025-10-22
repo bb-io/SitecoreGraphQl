@@ -9,7 +9,7 @@ public class WorkflowCommandDataHandlerTests : BaseDataHandlerTests
 {
     protected override IAsyncDataSourceItemHandler DataHandler => new WorkflowCommandDataHandler(InvocationContext, new()
     {
-        ItemId = "{A6D76C0C-5CC9-4AE1-BD63-E3B6DADAAFA8}"
+        ContentId = "{A6D76C0C-5CC9-4AE1-BD63-E3B6DADAAFA8}"
     });
 
     protected override string SearchString => "Approve";

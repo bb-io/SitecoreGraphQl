@@ -1,14 +1,15 @@
 ﻿using Apps.SitecoreGraphQl.Handlers;
+using Blackbird.Applications.SDK.Blueprints.Interfaces.CMS;
 using Blackbird.Applications.Sdk.Common;
 using Blackbird.Applications.Sdk.Common.Dynamic;
 using Blackbird.Applications.Sdk.Common.Exceptions;
 
 namespace Apps.SitecoreGraphQl.Models.Requests;
 
-public class ItemRequest
+public class ContentRequest : IDownloadContentInput
 {
     [Display("Item ID")]
-    public string ItemId { get; set; } = string.Empty;
+    public string ContentId { get; set; } = string.Empty;
     
     [Display("Version")]
     public int? Version { get; set; }
@@ -16,13 +17,13 @@ public class ItemRequest
     [Display("Language"), DataSource(typeof(LanguageDataSource))]
     public string? Language { get; set; }
 
-    public string GetItemId()
+    public string GetContentId()
     {
-        if(string.IsNullOrEmpty(ItemId))
+        if(string.IsNullOrEmpty(ContentId))
         {
-            throw new PluginMisconfigurationException("Item ID is null or empty, please provide a valid Item ID.");
+            throw new PluginMisconfigurationException("Item ID is null or empty, please provide a valid Content ID.");
         }
         
-        return ItemId;
+        return ContentId;
     }
 }

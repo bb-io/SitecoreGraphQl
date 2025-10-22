@@ -6,5 +6,5 @@ namespace Apps.SitecoreGraphQl.Models.Dtos;
 public class DeleteItemWrapperDto
 {
     [JsonProperty("deleteItem")]
-    public DeleteItemResponse DeleteItem { get; set; } = new();
+    public DeleteContentResponse DeleteContent { get; set; } = new();
 }

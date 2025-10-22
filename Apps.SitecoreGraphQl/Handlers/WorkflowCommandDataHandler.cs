@@ -11,17 +11,17 @@ using RestSharp;
 
 namespace Apps.SitecoreGraphQl.Handlers;
 
-public class WorkflowCommandDataHandler(InvocationContext invocationContext, [ActionParameter] ItemRequest itemRequest) 
+public class WorkflowCommandDataHandler(InvocationContext invocationContext, [ActionParameter] ContentRequest contentRequest) 
     : Invocable(invocationContext), IAsyncDataSourceItemHandler
 {
     public async Task<IEnumerable<DataSourceItem>> GetDataAsync(DataSourceContext context, CancellationToken cancellationToken)
     {
-        if(string.IsNullOrEmpty(itemRequest.ItemId))
+        if(string.IsNullOrEmpty(contentRequest.ContentId))
         {
-            throw new ArgumentException("Please provide first an Item ID first to retrieve workflow commands.");
+            throw new ArgumentException("Please provide first an Content ID first to retrieve workflow commands.");
         }
         
-        var item = await GetItemAsync(itemRequest);
+        var item = await GetItemAsync(contentRequest);
         if (item.WorkflowInfo?.Workflow?.WorkflowId == null || item.WorkflowInfo?.WorkflowState?.WorkflowStateId == null)
         {
             return new List<DataSourceItem>();
@@ -33,22 +33,22 @@ public class WorkflowCommandDataHandler(InvocationContext invocationContext, [Ac
         return commands.Select(cmd => new DataSourceItem(cmd.CommandId, cmd.DisplayName));
     }
 
-    private async Task<ItemResponse> GetItemAsync(ItemRequest itemRequest)
+    private async Task<ContentResponse> GetItemAsync(ContentRequest contentRequest)
     {
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {
-                query = GraphQlQueries.GetItemByIdQuery(itemRequest)
+                query = GraphQlQueries.GetItemByIdQuery(contentRequest)
             });
 
         var item = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(apiRequest);
-        if (item.Item == null)
+        if (item.Content == null)
         {
             throw new PluginApplicationException(
-                $"Item with ID {itemRequest.ItemId} was not found. Please verify the ID and try again.");
+                $"Item with ID {contentRequest.ContentId} was not found. Please verify the ID and try again.");
         }
 
-        return item.Item;
+        return item.Content;
     }
     
     private async Task<List<WorkflowCommandDto>> GetWorkflowCommandsAsync(string workflowId, string stateId)

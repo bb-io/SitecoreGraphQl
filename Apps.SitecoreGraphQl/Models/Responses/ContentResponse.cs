@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 
 namespace Apps.SitecoreGraphQl.Models.Responses;
 
-public class ItemResponse
+public class ContentResponse
 {
     [Display("Item ID")]
     public string ItemId { get; set; } = string.Empty;
@@ -19,6 +19,9 @@ public class ItemResponse
 
     [Display("Workflow information"), JsonProperty("workflow")]
     public ItemWorkflowResponse WorkflowInfo { get; set; } = new();
+
+    [DefinitionIgnore]
+    public FieldsResponse Fields { get; set; } = new();
 }
 
 public class ItemWorkflowResponse
@@ -28,4 +31,18 @@ public class ItemWorkflowResponse
     
     [Display("Workflow state"), JsonProperty("workflowState")]
     public WorkflowStateResponse WorkflowState { get; set; } = new();
+}
+
+public class FieldsResponse
+{
+    public List<FieldResponse> Nodes { get; set; } = new();
+}
+
+public class FieldResponse
+{
+    [Display("Field name")]
+    public string Name { get; set; } = string.Empty;
+    
+    [Display("Field value")]
+    public string Value { get; set; } = string.Empty;
 }

@@ -2,7 +2,7 @@
 
 namespace Apps.SitecoreGraphQl.Models.Responses;
 
-public class DeleteItemResponse
+public class DeleteContentResponse
 {
     [JsonProperty("successful")]
     public bool Successful { get; set; }

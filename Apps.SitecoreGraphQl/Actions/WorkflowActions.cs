@@ -20,7 +20,7 @@ public class WorkflowActions(InvocationContext invocationContext) : Invocable(in
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {
-                query = GraphQlMutations.ExecuteWorkflowCommandMutation(request.WorkflowCommandId, request.GetItemId())
+                query = GraphQlMutations.ExecuteWorkflowCommandMutation(request.WorkflowCommandId, request.GetContentId())
             });
 
         var result = await Client.ExecuteGraphQlWithErrorHandling<ExecuteCommandWrapperDto>(apiRequest);

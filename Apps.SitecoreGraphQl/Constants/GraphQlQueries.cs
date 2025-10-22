@@ -15,13 +15,13 @@ public static class GraphQlQueries
         return GetLanguages;
     }
     
-    public static string GetItemByIdQuery(ItemRequest itemRequest)
+    public static string GetItemByIdQuery(ContentRequest contentRequest)
     {
-        var itemId = itemRequest.GetItemId();
+        var itemId = contentRequest.GetContentId();
         var finalQuery = GetItemById
             .Replace("{ITEM_ID}", itemId)
-            .Replace("{LANGUAGE}", itemRequest.Language == null ? "null" : $"\"{itemRequest.Language}\"")
-            .Replace("{VERSION}", itemRequest.Version.HasValue ? $"{itemRequest.Version.Value}" : "null");
+            .Replace("{LANGUAGE}", contentRequest.Language == null ? "null" : $"\"{contentRequest.Language}\"")
+            .Replace("{VERSION}", contentRequest.Version.HasValue ? $"{contentRequest.Version.Value}" : "null");
         
         return finalQuery;
     }
