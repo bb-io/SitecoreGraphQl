@@ -24,11 +24,29 @@ public class ItemActions(InvocationContext invocationContext) : Invocable(invoca
             });
 
         var item = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(apiRequest);
-        if(item.Item == null)
+        if (item.Item == null)
         {
-            throw new PluginApplicationException($"Item with ID {itemRequest.ItemId} was not found. Please verify the ID and try again.");
+            throw new PluginApplicationException(
+                $"Item with ID {itemRequest.ItemId} was not found. Please verify the ID and try again.");
         }
-        
+
         return item.Item;
+    }
+    
+    [Action("Delete item", Description = "Delete an item by its ID")]
+    public async Task DeleteItem([ActionParameter] ItemRequest itemRequest)
+    {
+        var apiRequest = new Request(CredentialsProviders)
+            .AddJsonBody(new
+            {
+                query = GraphQlMutations.DeleteItemMutation(itemRequest.GetItemId())
+            });
+
+        var result = await Client.ExecuteGraphQlWithErrorHandling<DeleteItemWrapperDto>(apiRequest);
+        if (!result.DeleteItem.Successful)
+        {
+            throw new PluginApplicationException(
+                $"Failed to delete item with ID {itemRequest.ItemId}. Please verify the ID and try again.");
+        }
     }
 }
