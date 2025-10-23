@@ -14,13 +14,45 @@ namespace Apps.SitecoreGraphQl.Actions;
 [ActionList("Workflows")]
 public class WorkflowActions(InvocationContext invocationContext) : Invocable(invocationContext)
 {
-    [Action("Update workflow state", Description = "Update the workflow state of an item")]
-    public async Task<ExecuteCommandResponse> UpdateWorkflowState([ActionParameter] UpdateWorkflowStateRequest request)
+    [Action("Search workflows", Description = "Get all workflows with their states")]
+    public async Task<SearchWorkflowsResponse> SearchWorkflows()
     {
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {
-                query = GraphQlMutations.ExecuteWorkflowCommandMutation(request.WorkflowCommandId, request.GetContentId())
+                query = GraphQlQueries.SearchWorkflowsQuery()
+            });
+
+        var result = await Client.ExecuteGraphQlWithErrorHandling<WorkflowsWrapperDto>(apiRequest);
+        
+        return new SearchWorkflowsResponse
+        {
+            Workflows = result.Workflows.Nodes.Select(w => new WorkflowResponse
+            {
+                WorkflowId = w.WorkflowId,
+                DisplayName = w.DisplayName,
+                InitialState = new WorkflowStateResponse
+                {
+                    WorkflowStateId = w.InitialState.StateId,
+                    Name = w.InitialState.DisplayName
+                },
+                States = w.States.Nodes.Select(s => new WorkflowStateResponse
+                {
+                    WorkflowStateId = s.StateId,
+                    Name = s.DisplayName
+                }).ToList()
+            }).ToList()
+        };
+    }
+    
+    [Action("Update workflow state", Description = "Update the workflow state of an item")]
+    public async Task<ExecuteCommandResponse> UpdateWorkflowState([ActionParameter] UpdateWorkflowStateRequest request)
+    {
+        var mutation = GraphQlMutations.ExecuteWorkflowCommandMutation(request.WorkflowCommandId, request.GetContentId(), request.Language, request.Version);
+        var apiRequest = new Request(CredentialsProviders)
+            .AddJsonBody(new
+            {
+                query = mutation
             });
 
         var result = await Client.ExecuteGraphQlWithErrorHandling<ExecuteCommandWrapperDto>(apiRequest);

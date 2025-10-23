@@ -10,6 +10,8 @@ public static class GraphQlQueries
     
     private const string GetWorkflowCommands = @"query GetWorkflowCommands( $workflowId: String!, $stateId: String! ) { workflow(where: { workflowId: $workflowId }) { workflowId displayName commands(query: { stateId: $stateId }) { nodes { commandId displayName } pageInfo { hasNextPage endCursor } } } }";
     
+    private const string SearchWorkflows = @"query { workflows { nodes { workflowId displayName initialState { stateId displayName } states { nodes { stateId displayName } } } } }";
+    
     public static string GetLanguagesQuery()
     {
         return GetLanguages;
@@ -29,5 +31,10 @@ public static class GraphQlQueries
     public static string GetWorkflowCommandsQuery()
     {
         return GetWorkflowCommands;
+    }
+    
+    public static string SearchWorkflowsQuery()
+    {
+        return SearchWorkflows;
     }
 }

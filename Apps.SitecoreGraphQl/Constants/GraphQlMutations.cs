@@ -7,8 +7,9 @@ using System.Text;
 public static class GraphQlMutations
 {
     private const string DeleteItem = @"mutation { deleteItem( input: { database: ""master"", itemId: ""{ITEM_ID}"", permanently: false } ) { successful } }";
-    
-    private const string ExecuteWorkflowCommand = @"mutation { executeWorkflowCommand( input: { commandId: ""{COMMAND_ID}"" item: { itemId: ""{ITEM_ID}"" } } ) { successful nextStateId message completed error } }";
+
+    private const string ExecuteWorkflowCommand =
+        @"mutation { executeWorkflowCommand( input: { commandId: ""{COMMAND_ID}"" item: { itemId: ""{ITEM_ID}"" language: {LANGUAGE} version: {VERSION}  } } ) { successful nextStateId message completed error } }""";
 
     private const string UpdateItem = @"mutation { updateItem( input: { language: ""{LANGUAGE}"" itemId: ""{ITEM_ID}"" version: {VERSION} fields: [ {FIELDS} ] } ) { item { itemId name path fields(ownFields: true, excludeStandardFields: true) { nodes { name value } } } } }";
     
@@ -19,11 +20,13 @@ public static class GraphQlMutations
         return DeleteItem.Replace("{ITEM_ID}", itemId);
     }
     
-    public static string ExecuteWorkflowCommandMutation(string commandId, string itemId)
+    public static string ExecuteWorkflowCommandMutation(string commandId, string itemId, string? language, int? version)
     {
         return ExecuteWorkflowCommand
             .Replace("{COMMAND_ID}", commandId)
-            .Replace("{ITEM_ID}", itemId);
+            .Replace("{ITEM_ID}", itemId)
+            .Replace("{LANGUAGE}", language ?? "null")
+            .Replace("{VERSION}", version?.ToString() ?? "null");
     }
 
     public static string UpdateItemMutation(ContentMetadata metadata, List<FieldResponse> fields)

@@ -20,7 +20,7 @@ namespace Apps.SitecoreGraphQl.Actions;
 public class ContentActions(InvocationContext invocationContext, IFileManagementClient fileManagementClient) 
     : Invocable(invocationContext)
 {
-    [Action("Get content infromation", Description = "Get an content (item) by its ID")]
+    [Action("Get content information", Description = "Get an content (item) by its ID")]
     public async Task<ContentResponse> GetContent([ActionParameter] ContentRequest contentRequest)
     {
         var apiRequest = new Request(CredentialsProviders)
