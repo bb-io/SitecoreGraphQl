@@ -8,6 +8,22 @@ namespace Tests.SitecoreGraphQl;
 public class ContentActionsTests : TestBase
 {
     [TestMethod]
+    public async Task SearchContent_EnLanguage_Success()
+    {
+        var itemActions = new ContentActions(InvocationContext, FileManager);
+        var searchRequest = new SearchContentRequest
+        {
+            Language = "en",
+        };
+        
+        var result = await itemActions.SearchContent(searchRequest);
+        
+        Assert.IsNotNull(result);
+        Assert.IsTrue(result.Items.Count() > 0);
+        PrintObject(result);
+    }
+    
+    [TestMethod]
     public async Task GetContent_ValidId_Success()
     {
         var itemActions = new ContentActions(InvocationContext, FileManager);

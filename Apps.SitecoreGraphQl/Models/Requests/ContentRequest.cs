@@ -8,7 +8,7 @@ namespace Apps.SitecoreGraphQl.Models.Requests;
 
 public class ContentRequest : IDownloadContentInput
 {
-    [Display("Content ID")]
+    [Display("Content ID"), DataSource(typeof(ContentDataSource))]
     public string ContentId { get; set; } = string.Empty;
     
     [Display("Version")]
