@@ -9,7 +9,7 @@ public static class GraphQlMutations
     private const string DeleteItem = @"mutation { deleteItem( input: { database: ""master"", itemId: ""{ITEM_ID}"", permanently: false } ) { successful } }";
 
     private const string ExecuteWorkflowCommand =
-        @"mutation { executeWorkflowCommand( input: { commandId: ""{COMMAND_ID}"" item: { itemId: ""{ITEM_ID}"" language: {LANGUAGE} version: {VERSION}  } } ) { successful nextStateId message completed error } }""";
+        @"mutation { executeWorkflowCommand( input: { commandId: ""{COMMAND_ID}"" item: { itemId: ""{ITEM_ID}""{LANGUAGE_VERSION} } } ) { successful nextStateId message completed error } }";
 
     private const string UpdateItem = @"mutation { updateItem( input: { language: ""{LANGUAGE}"" itemId: ""{ITEM_ID}"" version: {VERSION} fields: [ {FIELDS} ] } ) { item { itemId name path fields(ownFields: true, excludeStandardFields: true) { nodes { name value } } } } }";
     
@@ -22,11 +22,20 @@ public static class GraphQlMutations
     
     public static string ExecuteWorkflowCommandMutation(string commandId, string itemId, string? language, int? version)
     {
+        var languageVersionPart = "";
+        if (!string.IsNullOrEmpty(language))
+        {
+            languageVersionPart += $" language: \"{language}\"";
+        }
+        if (version.HasValue)
+        {
+            languageVersionPart += $" version: {version}";
+        }
+
         return ExecuteWorkflowCommand
             .Replace("{COMMAND_ID}", commandId)
             .Replace("{ITEM_ID}", itemId)
-            .Replace("{LANGUAGE}", language ?? "null")
-            .Replace("{VERSION}", version?.ToString() ?? "null");
+            .Replace("{LANGUAGE_VERSION}", languageVersionPart);
     }
 
     public static string UpdateItemMutation(ContentMetadata metadata, List<FieldResponse> fields)
