@@ -5,8 +5,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <Product>Sitecore (GraphQL) [Beta]</Product>
-        <Description>Description</Description>
-        <Version>1.0.0</Version>
+        <Description>App to interact with Sitecore via GraphQL API.</Description>
+        <Version>1.0.1</Version>
         <AssemblyName>Apps.SitecoreGraphQl</AssemblyName>
     </PropertyGroup>
 
