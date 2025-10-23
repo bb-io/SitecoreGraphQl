@@ -1,0 +1,91 @@
+﻿using Apps.SitecoreGraphQl.Models.Requests;
+
+namespace Apps.SitecoreGraphQl.Constants;
+
+public static class GraphQlQueries
+{
+    private const string GetLanguages = "query { languages { nodes { iso name displayName } } }";
+    
+    private const string GetItemById = @"query { item( where: { database: ""master"", itemId: ""{ITEM_ID}"", language: {LANGUAGE}, version: {VERSION} }) { itemId name path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: true, excludeStandardFields: true) { nodes {  name value } } } }";
+    
+    private const string GetWorkflowCommands = @"query GetWorkflowCommands( $workflowId: String!, $stateId: String! ) { workflow(where: { workflowId: $workflowId }) { workflowId displayName commands(query: { stateId: $stateId }) { nodes { commandId displayName } pageInfo { hasNextPage endCursor } } } }";
+    
+    private const string SearchWorkflows = @"query { workflows { nodes { workflowId displayName initialState { stateId displayName } states { nodes { stateId displayName } } } } }";
+    
+    private const string SearchItems = @"query SearchItems($language: String, $pageIndex: Int, $pageSize: Int) {
+  search(
+    query: {
+      language: $language
+      latestVersionOnly: true
+      paging: {
+        pageIndex: $pageIndex
+        pageSize: $pageSize
+      }
+    }
+  ) {
+    totalCount
+    results {
+      itemId
+      name
+      path
+      version
+      innerItem {
+        itemId
+        name
+        path
+        version
+        language {
+          name
+        }
+        workflow {
+          workflowState {
+            stateId
+            displayName
+          }
+          workflow {
+            workflowId
+            displayName
+          }
+        }
+        fields(ownFields: true, excludeStandardFields: true) {
+          nodes {
+            name
+            value
+          }
+        }
+      }
+    }
+  }
+}";
+
+    public static string GetLanguagesQuery()
+    {
+        return GetLanguages;
+    }
+    
+    public static string GetItemByIdQuery(ContentRequest contentRequest)
+    {
+        var itemId = contentRequest.GetContentId();
+        var finalQuery = GetItemById
+            .Replace("{ITEM_ID}", itemId)
+            .Replace("{LANGUAGE}", contentRequest.Language == null ? "null" : $"\"{contentRequest.Language}\"")
+            .Replace("{VERSION}", contentRequest.Version.HasValue ? $"{contentRequest.Version.Value}" : "null");
+        
+        return finalQuery;
+    }
+    
+    public static string GetWorkflowCommandsQuery()
+    {
+        return GetWorkflowCommands;
+    }
+    
+    public static string SearchWorkflowsQuery()
+    {
+        return SearchWorkflows;
+    }
+    
+    public static string SearchItemsQuery()
+    {
+        return SearchItems;
+    }
+}
