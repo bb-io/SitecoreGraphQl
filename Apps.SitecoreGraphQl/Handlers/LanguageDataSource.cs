@@ -20,6 +20,6 @@ public class LanguageDataSource(InvocationContext invocationContext) : Invocable
         var response = await Client.ExecuteGraphQlWithErrorHandling<LanguagesWrapperDto>(apiRequest);
         return response.Languages.Nodes
             .Where(x => string.IsNullOrEmpty(context.SearchString) || x.DisplayName.Contains(context.SearchString, StringComparison.OrdinalIgnoreCase))
-            .Select(lang => new DataSourceItem(lang.Iso, lang.DisplayName));
+            .Select(lang => new DataSourceItem(lang.Name, lang.DisplayName));
     }
 }

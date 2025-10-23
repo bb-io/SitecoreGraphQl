@@ -4,11 +4,14 @@ using Apps.SitecoreGraphQl.Models.Dtos;
 using Apps.SitecoreGraphQl.Models.Requests;
 using Apps.SitecoreGraphQl.Models.Responses;
 using Apps.SitecoreGraphQl.Utils.Converters;
+using Blackbird.Applications.SDK.Blueprints;
 using Blackbird.Applications.Sdk.Common;
 using Blackbird.Applications.Sdk.Common.Actions;
 using Blackbird.Applications.Sdk.Common.Exceptions;
 using Blackbird.Applications.Sdk.Common.Invocation;
 using Blackbird.Applications.SDK.Extensions.FileManagement.Interfaces;
+using Blackbird.Filters.Transformations;
+using Blackbird.Filters.Xliff.Xliff2;
 using RestSharp;
 
 namespace Apps.SitecoreGraphQl.Actions;
@@ -69,6 +72,62 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             Content = fileReference
         };
     }
+
+    [Action("Upload content", Description = "Upload translated content back to Sitecore")]
+    [BlueprintActionDefinition(BlueprintAction.UploadContent)]
+    public async Task UploadItemContent([ActionParameter] UploadContentRequest uploadContentRequest)
+    {
+        var fileStream = await fileManagementClient.DownloadAsync(uploadContentRequest.Content);
+        var memoryStream = new MemoryStream();
+        await fileStream.CopyToAsync(memoryStream);
+        memoryStream.Position = 0;
+
+        var htmlString = System.Text.Encoding.UTF8.GetString(memoryStream.ToArray());
+        if (Xliff2Serializer.IsXliff2(htmlString))
+        {
+            htmlString = Transformation.Parse(htmlString, uploadContentRequest.Content.Name).Target().Serialize();
+            if (htmlString == null)
+            {
+                throw new PluginMisconfigurationException("XLIFF did not contain any files");
+            }
+        }
+
+        var fields = HtmlToFieldsConverter.ConvertToFields(htmlString);
+        var metadata = HtmlToFieldsConverter.ExtractMetadata(htmlString);
+        metadata = metadata with
+        {
+            ContentId = uploadContentRequest.ContentId ?? metadata.ContentId,
+            TargetLanguage = uploadContentRequest.Locale ?? throw new PluginMisconfigurationException("Locale must be provided in the upload request")
+        };
+        
+        var targetContent = await GetContent(new ContentRequest
+        {
+            ContentId = metadata.ContentId,
+            Language = metadata.TargetLanguage
+        });
+
+        if (targetContent.Version == 0)
+        {
+            var createItemVersionMutation = GraphQlMutations.AddItemVersionMutation(metadata.ContentId, metadata.TargetLanguage);
+            var createVersionRequest = new Request(CredentialsProviders)
+                .AddJsonBody(new
+                {
+                    query = createItemVersionMutation
+                });
+            
+            await Client.ExecuteGraphQlWithErrorHandling<AddItemVersionWrapperDto>(createVersionRequest);
+        }
+        
+        var mutation = GraphQlMutations.UpdateItemMutation(metadata, fields);
+        var apiRequest = new Request(CredentialsProviders)
+            .AddJsonBody(new
+            {
+                query = mutation
+            });
+
+        await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
+    }
+    
     
     [Action("Delete content", Description = "Delete a content (item) by its ID")]
     public async Task DeleteContent([ActionParameter] ContentRequest contentRequest)

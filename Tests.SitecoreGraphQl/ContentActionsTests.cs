@@ -1,4 +1,5 @@
 using Apps.SitecoreGraphQl.Actions;
+using Apps.SitecoreGraphQl.Models.Requests;
 using Tests.SitecoreGraphQl.Base;
 
 namespace Tests.SitecoreGraphQl;
@@ -74,5 +75,22 @@ public class ContentActionsTests : TestBase
         Assert.IsNotNull(result);
         Assert.IsNotNull(result.Content.Name);
         PrintObject(result);
+    }
+    
+    [TestMethod]
+    public async Task UploadItemContent_ValidFile_Success()
+    {
+        var itemActions = new ContentActions(InvocationContext, FileManager);
+        var uploadContentRequest = new UploadContentRequest
+        {
+            Content = new()
+            {
+                Name = "Sitecore Authoring and Management API.html",
+                ContentType = "text/html"
+            },
+            Locale = "nl-nl"
+        };
+        
+        await itemActions.UploadItemContent(uploadContentRequest);
     }
 }
