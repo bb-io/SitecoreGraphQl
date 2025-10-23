@@ -19,7 +19,7 @@ public class ContentActionsTests : TestBase
         var result = await itemActions.GetContent(itemRequest);
         
         Assert.IsNotNull(result);
-        Assert.IsNotNull(result.ItemId);
+        Assert.IsNotNull(result.Id);
         PrintObject(result);
     }
     
@@ -37,7 +37,7 @@ public class ContentActionsTests : TestBase
         var result = await itemActions.GetContent(itemRequest);
         
         Assert.IsNotNull(result);
-        Assert.IsNotNull(result.ItemId);
+        Assert.IsNotNull(result.Id);
         PrintObject(result);
     }
 

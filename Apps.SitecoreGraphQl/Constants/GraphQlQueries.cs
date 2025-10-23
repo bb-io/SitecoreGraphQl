@@ -12,6 +12,52 @@ public static class GraphQlQueries
     
     private const string SearchWorkflows = @"query { workflows { nodes { workflowId displayName initialState { stateId displayName } states { nodes { stateId displayName } } } } }";
     
+    private const string SearchItems = @"query SearchItems($language: String, $pageIndex: Int, $pageSize: Int) {
+  search(
+    query: {
+      language: $language
+      latestVersionOnly: true
+      paging: {
+        pageIndex: $pageIndex
+        pageSize: $pageSize
+      }
+    }
+  ) {
+    totalCount
+    results {
+      itemId
+      name
+      path
+      version
+      innerItem {
+        itemId
+        name
+        path
+        version
+        language {
+          name
+        }
+        workflow {
+          workflowState {
+            stateId
+            displayName
+          }
+          workflow {
+            workflowId
+            displayName
+          }
+        }
+        fields(ownFields: true, excludeStandardFields: true) {
+          nodes {
+            name
+            value
+          }
+        }
+      }
+    }
+  }
+}";
+
     public static string GetLanguagesQuery()
     {
         return GetLanguages;
@@ -36,5 +82,10 @@ public static class GraphQlQueries
     public static string SearchWorkflowsQuery()
     {
         return SearchWorkflows;
+    }
+    
+    public static string SearchItemsQuery()
+    {
+        return SearchItems;
     }
 }

@@ -1,14 +1,15 @@
-﻿using Blackbird.Applications.Sdk.Common;
+﻿using Blackbird.Applications.SDK.Blueprints.Interfaces.CMS;
+using Blackbird.Applications.Sdk.Common;
 using Newtonsoft.Json;
 
 namespace Apps.SitecoreGraphQl.Models.Responses;
 
-public class ContentResponse
+public class ContentResponse : IContentOutput
 {
-    [Display("Item ID")]
-    public string ItemId { get; set; } = string.Empty;
+    [Display("Content ID"), JsonProperty("itemId")]
+    public string Id { get; set; } = string.Empty;
     
-    [Display("Item name")]
+    [Display("Content name")]
     public string Name { get; set; } = string.Empty;
     
     [Display("Path")]
@@ -19,6 +20,9 @@ public class ContentResponse
 
     [Display("Workflow information"), JsonProperty("workflow")]
     public ItemWorkflowResponse WorkflowInfo { get; set; } = new();
+
+    [Display("Language information"), JsonProperty("language")]
+    public LanguageWrapperResponse Language { get; set; }
 
     [DefinitionIgnore]
     public FieldsResponse Fields { get; set; } = new();
@@ -45,4 +49,10 @@ public class FieldResponse
     
     [Display("Field value")]
     public string Value { get; set; } = string.Empty;
+}
+
+public class LanguageWrapperResponse
+{
+    [Display("Language"), JsonProperty("name")]
+    public string Name { get; set; } = string.Empty;
 }

@@ -20,6 +20,69 @@ namespace Apps.SitecoreGraphQl.Actions;
 public class ContentActions(InvocationContext invocationContext, IFileManagementClient fileManagementClient) 
     : Invocable(invocationContext)
 {
+    [Action("Search content", Description = "Retrieve a list of content (items)")]
+    [BlueprintActionDefinition(BlueprintAction.SearchContent)]
+    public async Task<SearchContentResponse> SearchContent([ActionParameter] SearchContentRequest searchContentRequest)
+    {
+        var allItems = new List<ContentResponse>();
+        var pageSize = 25;
+        var pageIndex = 0;
+        var totalCount = 0;
+        
+        do
+        {
+            var apiRequest = new Request(CredentialsProviders)
+                .AddJsonBody(new
+                {
+                    query = GraphQlQueries.SearchItemsQuery(),
+                    variables = new
+                    {
+                        language = searchContentRequest.Language,
+                        pageIndex,
+                        pageSize
+                    }
+                });
+
+            var searchResult = await Client.ExecuteGraphQlWithErrorHandling<SearchItemsWrapperDto>(apiRequest);
+            totalCount = searchResult.Search.TotalCount;
+            
+            foreach (var item in searchResult.Search.Results)
+            {
+                if (item.InnerItem != null)
+                {
+                    allItems.Add(item.InnerItem);
+                }
+                else
+                {
+                    allItems.Add(new ContentResponse
+                    {
+                        Id = item.ItemId,
+                        Name = item.Name,
+                        Path = item.Path,
+                        Version = item.Version,
+                        WorkflowInfo = new ItemWorkflowResponse(),
+                        Fields = new FieldsResponse()
+                    });
+                }
+            }
+            
+            pageIndex++;
+            
+        } while (allItems.Count < totalCount);
+
+        if (searchContentRequest.Language != null)
+        {
+            allItems = allItems
+                .Where(item => item.Language.Name.Equals(searchContentRequest.Language, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        
+        return new SearchContentResponse
+        {
+            Items = allItems
+        };
+    }
+    
     [Action("Get content information", Description = "Get an content (item) by its ID")]
     public async Task<ContentResponse> GetContent([ActionParameter] ContentRequest contentRequest)
     {
@@ -40,6 +103,7 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
     }
     
     [Action("Download content", Description = "Download the content of a content (item) by its ID")]
+    [BlueprintActionDefinition(BlueprintAction.DownloadContent)]
     public async Task<FileResponse> DownloadItemContent([ActionParameter] ContentRequest contentRequest)
     {
         var apiRequest = new Request(CredentialsProviders)
