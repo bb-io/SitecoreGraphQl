@@ -6,19 +6,19 @@ namespace Apps.SitecoreGraphQl.Models.Dtos;
 public class SearchItemsWrapperDto
 {
     [JsonProperty("search")]
-    public SearchResultDto Search { get; set; } = new();
+    public SearchItemsDto Search { get; set; } = new();
 }
 
-public class SearchResultDto
+public class SearchItemsDto
 {
     [JsonProperty("totalCount")]
     public int TotalCount { get; set; }
     
     [JsonProperty("results")]
-    public List<SearchResultItemDto> Results { get; set; } = new();
+    public List<SearchItemResultDto> Results { get; set; } = new();
 }
 
-public class SearchResultItemDto
+public class SearchItemResultDto
 {
     [JsonProperty("itemId")]
     public string ItemId { get; set; } = string.Empty;
@@ -32,12 +32,12 @@ public class SearchResultItemDto
     [JsonProperty("version")]
     public int Version { get; set; }
     
-    [JsonProperty("innerItem")]
-    public ContentResponse? InnerItem { get; set; }
-
     [JsonProperty("createdDate")]
-    public DateTime? CreatedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
     
     [JsonProperty("updatedDate")]
-    public DateTime? UpdatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    
+    [JsonProperty("innerItem")]
+    public ContentResponse? InnerItem { get; set; }
 }

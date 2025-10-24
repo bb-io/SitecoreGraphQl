@@ -1,0 +1,5 @@
+using Apps.SitecoreGraphQl.Models.Dtos;
+
+namespace Apps.SitecoreGraphQl.Models.Records;
+
+public record SearchContentParams(string? Language, List<CriteriaDto>? Criteria = null, List<SortDto>? Sort = null, bool AutoPagination = true);

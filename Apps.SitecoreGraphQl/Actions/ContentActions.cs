@@ -3,6 +3,7 @@ using Apps.SitecoreGraphQl.Constants;
 using Apps.SitecoreGraphQl.Models.Dtos;
 using Apps.SitecoreGraphQl.Models.Requests;
 using Apps.SitecoreGraphQl.Models.Responses;
+using Apps.SitecoreGraphQl.Models.Records;
 using Apps.SitecoreGraphQl.Utils.Converters;
 using Blackbird.Applications.SDK.Blueprints;
 using Blackbird.Applications.Sdk.Common;
@@ -22,60 +23,67 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
 {
     [Action("Search content", Description = "Retrieve a list of content (items)")]
     [BlueprintActionDefinition(BlueprintAction.SearchContent)]
-    public async Task<SearchContentResponse> SearchContent([ActionParameter] SearchContentRequest searchContentRequest)
+    public async Task<SearchContentResponse> SearchContent([ActionParameter] SearchContentRequest searchContentRequest,
+        [ActionParameter] DateFilters dateFilters)
     {
-        var allItems = new List<ContentResponse>();
-        var pageSize = 25;
-        var pageIndex = 0;
-        var totalCount = 0;
+        var criteria = new List<CriteriaDto>();
         
-        do
+        if (!string.IsNullOrEmpty(searchContentRequest.RootPath))
         {
-            var apiRequest = new Request(CredentialsProviders)
+            var pathRequest = new Request(CredentialsProviders)
                 .AddJsonBody(new
                 {
-                    query = GraphQlQueries.SearchItemsQuery(),
-                    variables = new
-                    {
-                        language = searchContentRequest.Language,
-                        pageIndex,
-                        pageSize
-                    }
+                    query = GraphQlQueries.GetItemByPathQuery(searchContentRequest.RootPath)
                 });
 
-            var searchResult = await Client.ExecuteGraphQlWithErrorHandling<SearchItemsWrapperDto>(apiRequest);
-            totalCount = searchResult.Search.TotalCount;
-            
-            foreach (var item in searchResult.Search.Results)
+            var pathResult = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(pathRequest);
+            if (pathResult.Content == null)
             {
-                if (item.InnerItem != null)
-                {
-                    allItems.Add(item.InnerItem);
-                }
-                else
-                {
-                    allItems.Add(new ContentResponse
-                    {
-                        Id = item.ItemId,
-                        Name = item.Name,
-                        Path = item.Path,
-                        Version = item.Version,
-                        WorkflowInfo = new ItemWorkflowResponse(),
-                        Fields = new FieldsResponse()
-                    });
-                }
+                throw new PluginApplicationException(
+                    $"Item with path '{searchContentRequest.RootPath}' was not found. Please provide a correct item path.");
             }
             
-            pageIndex++;
-            
-        } while (allItems.Count < totalCount);
-
-        if (searchContentRequest.Language != null)
-        {
-            allItems = allItems
-                .Where(item => item.Language.Name.Equals(searchContentRequest.Language, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            criteria.Add(new CriteriaDto
+            {
+                Field = "_path",
+                CriteriaType = "SEARCH",
+                Operator = "MUST",
+                Value = pathResult.Content.Id
+            });
         }
+        
+        if (dateFilters.CreatedAfter.HasValue || dateFilters.CreatedBefore.HasValue)
+        {
+            var createdRange = BuildDateRange(dateFilters.CreatedAfter, dateFilters.CreatedBefore);
+            if (!string.IsNullOrEmpty(createdRange))
+            {
+                criteria.Add(new CriteriaDto
+                {
+                    Field = "__smallcreateddate",
+                    CriteriaType = "RANGE",
+                    Operator = "MUST",
+                    Value = createdRange
+                });
+            }
+        }
+        
+        if (dateFilters.UpdatedAfter.HasValue || dateFilters.UpdatedBefore.HasValue)
+        {
+            var updatedRange = BuildDateRange(dateFilters.UpdatedAfter, dateFilters.UpdatedBefore);
+            if (!string.IsNullOrEmpty(updatedRange))
+            {
+                criteria.Add(new CriteriaDto
+                {
+                    Field = "__smallupdateddate",
+                    CriteriaType = "RANGE",
+                    Operator = "MUST",
+                    Value = updatedRange
+                });
+            }
+        }
+        
+        var searchParams = new SearchContentParams(searchContentRequest.Language, criteria.Count > 0 ? criteria : null);
+        var allItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
         
         return new SearchContentResponse
         {
@@ -208,5 +216,17 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             throw new PluginApplicationException(
                 $"Failed to delete item with ID {contentRequest.ContentId}. Please verify the ID and try again.");
         }
+    }
+    
+    private static string? BuildDateRange(DateTime? fromDate, DateTime? toDate)
+    {
+        var from = fromDate?.ToString("yyyy-MM-ddTHH:mm:ssZ") ?? "*";
+        var to = toDate?.ToString("yyyy-MM-ddTHH:mm:ssZ") ?? "NOW";
+        if (from == "*" && to == "NOW")
+        {
+            return null;
+        }
+        
+        return $"[{from} TO {to}]";
     }
 }

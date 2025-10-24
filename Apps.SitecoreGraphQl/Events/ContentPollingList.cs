@@ -2,9 +2,11 @@
 using Apps.SitecoreGraphQl.Constants;
 using Apps.SitecoreGraphQl.Events.Models;
 using Apps.SitecoreGraphQl.Models.Dtos;
+using Apps.SitecoreGraphQl.Models.Records;
 using Apps.SitecoreGraphQl.Models.Requests;
 using Apps.SitecoreGraphQl.Models.Responses;
 using Blackbird.Applications.SDK.Blueprints;
+using Blackbird.Applications.Sdk.Common.Exceptions;
 using Blackbird.Applications.Sdk.Common.Invocation;
 using Blackbird.Applications.Sdk.Common.Polling;
 using RestSharp;
@@ -39,62 +41,49 @@ public class ContentPollingList(InvocationContext invocationContext) : Invocable
             };
         }
 
-        var allItems = new List<ContentResponse>();
-        var pageSize = 25;
-        var pageIndex = 0;
-        var totalCount = 0;
-        
-        do
+        var criteria = new List<CriteriaDto>();
+        if (!string.IsNullOrEmpty(searchContentRequest.RootPath))
         {
-            var apiRequest = new Request(CredentialsProviders)
+            var pathRequest = new Request(CredentialsProviders)
                 .AddJsonBody(new
                 {
-                    query = GraphQlQueries.SearchItemsQuery(),
-                    variables = new
-                    {
-                        language = searchContentRequest.Language,
-                        pageIndex,
-                        pageSize
-                    }
+                    query = GraphQlQueries.GetItemByPathQuery(searchContentRequest.RootPath)
                 });
 
-            var searchResult = await Client.ExecuteGraphQlWithErrorHandling<SearchItemsWrapperDto>(apiRequest);
-            totalCount = searchResult.Search.TotalCount;
-            
-            var results = searchResult.Search.Results
-                .Where(x => x.CreatedAt >= request.Memory.LastPollingTime || x.UpdatedAt >= request.Memory.LastPollingTime)
-                .ToList();
-            
-            foreach (var item in results)
+            var pathResult = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(pathRequest);
+            if (pathResult.Content == null)
             {
-                if (item.InnerItem != null)
-                {
-                    allItems.Add(item.InnerItem);
-                }
-                else
-                {
-                    allItems.Add(new ContentResponse
-                    {
-                        Id = item.ItemId,
-                        Name = item.Name,
-                        Path = item.Path,
-                        Version = item.Version,
-                        WorkflowInfo = new ItemWorkflowResponse(),
-                        Fields = new FieldsResponse()
-                    });
-                }
+                throw new PluginApplicationException(
+                    $"Item with path '{searchContentRequest.RootPath}' was not found. Please provide a correct item path.");
             }
             
-            pageIndex++;
-            
-        } while (allItems.Count < totalCount);
-
-        if (searchContentRequest.Language != null)
-        {
-            allItems = allItems
-                .Where(item => item.Language.Name.Equals(searchContentRequest.Language, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            criteria.Add(new CriteriaDto
+            {
+                Field = "_path",
+                CriteriaType = "SEARCH",
+                Operator = "MUST",
+                Value = pathResult.Content.Id
+            });
         }
+        
+        var sinceRange = $"[{request.Memory.LastPollingTime:yyyy-MM-ddTHH:mm:ssZ} TO NOW]";
+        criteria.Add(new CriteriaDto
+        {
+            Field = "__smallupdateddate",
+            CriteriaType = "RANGE",
+            Operator = "SHOULD",
+            Value = sinceRange
+        });
+        criteria.Add(new CriteriaDto
+        {
+            Field = "__smallcreateddate",
+            CriteriaType = "RANGE",
+            Operator = "SHOULD",
+            Value = sinceRange
+        });
+        
+        var searchParams = new SearchContentParams(searchContentRequest.Language, criteria);
+        var allItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
         
         return new PollingEventResponse<DateMemory, SearchContentResponse>
         {

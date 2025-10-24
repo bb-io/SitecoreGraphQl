@@ -8,4 +8,7 @@ public class SearchContentRequest
 {
     [Display("Language"), DataSource(typeof(LanguageDataSource))]
     public string? Language { get; set; }
+    
+    [Display("Root path")]
+    public string? RootPath { get; set; }
 }

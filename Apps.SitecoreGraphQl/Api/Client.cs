@@ -1,4 +1,7 @@
 using Apps.SitecoreGraphQl.Models.Dtos;
+using Apps.SitecoreGraphQl.Models.Records;
+using Apps.SitecoreGraphQl.Models.Responses;
+using Apps.SitecoreGraphQl.Constants;
 using Apps.SitecoreGraphQl.Utils;
 using Blackbird.Applications.Sdk.Common.Authentication;
 using Blackbird.Applications.Sdk.Common.Exceptions;
@@ -19,6 +22,75 @@ public class Client(List<AuthenticationCredentialsProvider> creds) : BlackBirdRe
         var response = await ExecuteWithErrorHandling(request);
         var graphQlResponse = JsonConvert.DeserializeObject<GraphQlResponseDto<T>>(response.Content!);
         return graphQlResponse!.Data!;
+    }
+    
+    public async Task<List<ContentResponse>> SearchContentAsync(SearchContentParams searchParams, IEnumerable<AuthenticationCredentialsProvider> credentialsProviders)
+    {
+        var allItems = new List<ContentResponse>();
+        var pageSize = 25;
+        var pageIndex = 0;
+        var totalCount = 0;
+        
+        do
+        {
+            var apiRequest = new Request(credentialsProviders);
+            
+            if (searchParams.Criteria != null && searchParams.Criteria.Count > 0)
+            {
+                var query = GraphQlQueries.SearchItemsWithCriteriasQuery(searchParams.Criteria, searchParams.Sort);
+                apiRequest.AddJsonBody(new
+                {
+                    query,
+                    variables = new
+                    {
+                        language = searchParams.Language,
+                        pageIndex,
+                        pageSize
+                    }
+                });
+            }
+            else
+            {
+                apiRequest.AddJsonBody(new
+                {
+                    query = GraphQlQueries.SearchItemsQuery(),
+                    variables = new
+                    {
+                        language = searchParams.Language,
+                        pageIndex,
+                        pageSize
+                    }
+                });
+            }
+
+            var searchResult = await ExecuteGraphQlWithErrorHandling<SearchItemsWrapperDto>(apiRequest);
+            totalCount = searchResult.Search.TotalCount;
+            
+            foreach (var item in searchResult.Search.Results)
+            {
+                if (item.InnerItem != null)
+                {
+                    allItems.Add(item.InnerItem);
+                }
+                else
+                {
+                    allItems.Add(new ContentResponse
+                    {
+                        Id = item.ItemId,
+                        Name = item.Name,
+                        Path = item.Path,
+                        Version = item.Version,
+                        WorkflowInfo = new ItemWorkflowResponse(),
+                        Fields = new FieldsResponse()
+                    });
+                }
+            }
+            
+            pageIndex++;
+            
+        } while (searchParams.AutoPagination && allItems.Count < totalCount);
+
+        return allItems;
     }
     
     public override async Task<RestResponse> ExecuteWithErrorHandling(RestRequest request)
