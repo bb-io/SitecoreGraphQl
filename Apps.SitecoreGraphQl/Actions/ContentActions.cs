@@ -112,12 +112,20 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
     
     [Action("Download content", Description = "Download the content of a content (item) by its ID")]
     [BlueprintActionDefinition(BlueprintAction.DownloadContent)]
-    public async Task<FileResponse> DownloadItemContent([ActionParameter] ContentRequest contentRequest)
+    public async Task<FileResponse> DownloadItemContent([ActionParameter] ContentRequest contentRequest,
+        [ActionParameter] DownloadContentRequest downloadContentRequest,
+        [ActionParameter] FilteringOptions filteringOptions)
     {
+        if(string.IsNullOrEmpty(contentRequest.Language))
+        {
+            throw new PluginMisconfigurationException("Language must be specified to download content.");
+        }
+
+        var query = GraphQlQueries.GetItemByIdQuery(contentRequest);
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {
-                query = GraphQlQueries.GetItemByIdQuery(contentRequest)
+                query
             });
 
         var item = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(apiRequest);
@@ -127,12 +135,46 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
                 $"Item with ID {contentRequest.ContentId} was not found. Please verify the ID and try again.");
         }
         
-        var htmlString = FieldsToHtmlConverter.ConvertToHtml(
-            new Models.Records.ContentMetadata(
-                contentRequest.ContentId,
-                contentRequest.Version,
-                contentRequest.Language),
-            item.Content.Fields.Nodes);
+        var fields = filteringOptions.ApplyFilteringOptions(item.Content.Fields.Nodes);
+        var rootContentMetadata = new ContentMetadata(
+            contentRequest.ContentId, 
+            contentRequest.Version, 
+            contentRequest.Language, 
+            RootContentId: contentRequest.ContentId);
+        var fieldsEntities = new List<ContentWithFieldsEntity>
+        {
+            new(item.Content.Id, item.Content.Version, item.Content.Language.Name, fields, IsRootContent: true)
+        };
+
+        if (downloadContentRequest.IncludeChildItems == true)
+        {
+            var searchParams = new SearchContentParams(
+                contentRequest.Language,
+                new List<CriteriaDto>
+                {
+                    new()
+                    {
+                        Field = "_path",
+                        CriteriaType = "SEARCH",
+                        Operator = "MUST",
+                        Value = contentRequest.ContentId
+                    }
+                });
+            
+            var childItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
+            foreach (var childItem in childItems)
+            {
+                var childFields = filteringOptions.ApplyFilteringOptions(childItem.Fields.Nodes);
+                fieldsEntities.Add(new ContentWithFieldsEntity(
+                    childItem.Id,
+                    childItem.Version,
+                    childItem.Language.Name,
+                    childFields,
+                    IsRootContent: false));
+            }
+        }
+        
+        var htmlString = FieldsToHtmlConverter.ConvertToHtml(rootContentMetadata, fieldsEntities);
         
         var bytes = System.Text.Encoding.UTF8.GetBytes(htmlString);
         var memoryStream = new MemoryStream(bytes);

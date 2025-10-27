@@ -15,7 +15,7 @@ public class ContentRequest : IDownloadContentInput
     public int? Version { get; set; }
 
     [Display("Language"), DataSource(typeof(LanguageDataSource))]
-    public string? Language { get; set; }
+    public string Language { get; set; } = string.Empty;
 
     public string GetContentId()
     {

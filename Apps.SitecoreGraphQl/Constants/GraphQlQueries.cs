@@ -8,9 +8,9 @@ public static class GraphQlQueries
 {
     private const string GetLanguages = "query { languages { nodes { iso name displayName } } }";
     
-    private const string GetItemById = @"query { item( where: { database: ""master"", itemId: ""{ITEM_ID}"", language: {LANGUAGE}, version: {VERSION} }) { itemId name path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: true, excludeStandardFields: true) { nodes {  name value } } } }";
+    private const string GetItemById = @"query { item( where: { database: ""master"", itemId: ""{ITEM_ID}"", language: {LANGUAGE}, version: {VERSION} }) { itemId name displayName path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: false, excludeStandardFields: false) { nodes { name value templateField { name type key typeKey title(language: {LANGUAGE}) toolTip(language: {LANGUAGE}) description(language: {LANGUAGE}) section { itemTemplateSectionId key name } } } } } }";
     
-    private const string GetItemByPath = @"query { item( where: { database: ""master"", path: ""{ITEM_PATH}"" }) { itemId name path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: true, excludeStandardFields: true) { nodes { name value } } } }";
+    private const string GetItemByPath = @"query { item( where: { database: ""master"", path: ""{ITEM_PATH}"" }) { itemId name displayName path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: false, excludeStandardFields: false) { nodes { name value templateField { name type key typeKey title toolTip description section { itemTemplateSectionId key name } } } } } }";
     
     private const string GetWorkflowCommands = @"query GetWorkflowCommands( $workflowId: String!, $stateId: String! ) { workflow(where: { workflowId: $workflowId }) { workflowId displayName commands(query: { stateId: $stateId }) { nodes { commandId displayName } pageInfo { hasNextPage endCursor } } } }";
     
@@ -31,6 +31,7 @@ public static class GraphQlQueries
     results {
       itemId
       name
+      displayName
       path
       version
       createdDate
@@ -38,6 +39,7 @@ public static class GraphQlQueries
       innerItem {
         itemId
         name
+        displayName
         path
         version
         language {
@@ -53,10 +55,21 @@ public static class GraphQlQueries
             displayName
           }
         }
-        fields(ownFields: true, excludeStandardFields: true) {
+        fields(ownFields: false, excludeStandardFields: false) {
           nodes {
             name
             value
+            templateField {
+              name
+              type
+              key
+              typeKey
+              section {
+                itemTemplateSectionId
+                key
+                name
+              }
+            }
           }
         }
       }
@@ -64,7 +77,7 @@ public static class GraphQlQueries
   }
 }";
 
-    private const string SearchItemsWithFilters = @"query SearchItems($language: String, $pageIndex: Int, $pageSize: Int) {
+    private const string SearchItemsWithFilters = @"query SearchItems($language: String!, $pageIndex: Int, $pageSize: Int) {
   search(
     query: {
       language: $language
@@ -73,7 +86,7 @@ public static class GraphQlQueries
         pageIndex: $pageIndex
         pageSize: $pageSize
       }
-      searchStatement: {
+      filterStatement: {
         criteria: [
           {CRITERIA}
         ]
@@ -85,6 +98,7 @@ public static class GraphQlQueries
     results {
       itemId
       name
+      displayName
       path
       version
       createdDate
@@ -92,6 +106,7 @@ public static class GraphQlQueries
       innerItem {
         itemId
         name
+        displayName
         path
         version
         language {
@@ -107,10 +122,24 @@ public static class GraphQlQueries
             displayName
           }
         }
-        fields(ownFields: true, excludeStandardFields: true) {
+        fields(ownFields: false, excludeStandardFields: false) {
           nodes {
             name
             value
+            templateField {
+              name
+              type
+              key
+              typeKey
+              title(language: $language)
+              toolTip(language: $language)
+              description(language: $language)
+              section {
+                itemTemplateSectionId
+                key
+                name
+              }
+            }
           }
         }
       }
