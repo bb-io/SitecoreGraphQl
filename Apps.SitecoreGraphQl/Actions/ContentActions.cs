@@ -137,7 +137,7 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
                 for (int i = 0; i < fieldNames.Count; i++)
                 {
                     var field = item.Fields.Nodes.FirstOrDefault(f => f.Name.Equals(fieldNames[i], StringComparison.OrdinalIgnoreCase));
-                    if (field == null || field.Value == null || !field.Value.ToString().Contains(fieldValues[i], StringComparison.OrdinalIgnoreCase))
+                    if (field == null || field.Value == null || !field.Value.ToString().Equals(fieldValues[i], StringComparison.OrdinalIgnoreCase))
                     {
                         return false;
                     }

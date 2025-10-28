@@ -27,7 +27,7 @@ public class Client(List<AuthenticationCredentialsProvider> creds) : BlackBirdRe
     public async Task<List<ContentResponse>> SearchContentAsync(SearchContentParams searchParams, IEnumerable<AuthenticationCredentialsProvider> credentialsProviders)
     {
         var allItems = new List<ContentResponse>();
-        var pageSize = 25;
+        var pageSize = 100;
         var pageIndex = 0;
         var totalCount = 0;
         
