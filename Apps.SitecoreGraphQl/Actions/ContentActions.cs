@@ -182,7 +182,7 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             throw new PluginMisconfigurationException("Language must be specified to download content.");
         }
 
-        var query = GraphQlQueries.GetItemByIdQuery(contentRequest);
+        var query = GraphQlQueries.GetItemByIdQuery(contentRequest, filteringOptions.IncludeOnlyOwnFields, filteringOptions.ExcludeStandardFields);
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {

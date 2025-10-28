@@ -8,7 +8,7 @@ public static class GraphQlQueries
 {
     private const string GetLanguages = "query { languages { nodes { iso name displayName } } }";
     
-    private const string GetItemById = @"query { item( where: { database: ""master"", itemId: ""{ITEM_ID}"", language: {LANGUAGE}, version: {VERSION} }) { itemId name displayName path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: false, excludeStandardFields: false) { nodes { name value templateField { name type key typeKey title(language: {LANGUAGE}) toolTip(language: {LANGUAGE}) description(language: {LANGUAGE}) section { itemTemplateSectionId key name } } } } } }";
+    private const string GetItemById = @"query { item( where: { database: ""master"", itemId: ""{ITEM_ID}"", language: {LANGUAGE}, version: {VERSION} }) { itemId name displayName path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: {OWN_FIELDS}, excludeStandardFields: {EXCLUDE_STANDARD}) { nodes { name value templateField { name type key typeKey title(language: {LANGUAGE}) toolTip(language: {LANGUAGE}) description(language: {LANGUAGE}) section { itemTemplateSectionId key name } } } } } }";
     
     private const string GetItemByPath = @"query { item( where: { database: ""master"", path: ""{ITEM_PATH}"" }) { itemId name displayName path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: false, excludeStandardFields: false) { nodes { name value templateField { name type key typeKey section { itemTemplateSectionId key name } } } } } }";
     
@@ -123,7 +123,7 @@ public static class GraphQlQueries
             displayName
           }
         }
-        fields(ownFields: false, excludeStandardFields: false) {
+        fields(ownFields: {OWN_FIELDS}, excludeStandardFields: {EXCLUDE_STANDARD}) {
           nodes {
             name
             value
@@ -153,13 +153,15 @@ public static class GraphQlQueries
         return GetLanguages;
     }
     
-    public static string GetItemByIdQuery(ContentRequest contentRequest)
+    public static string GetItemByIdQuery(ContentRequest contentRequest, bool ownFields = false, bool excludeStandardFields = false)
     {
         var itemId = contentRequest.GetContentId();
         var finalQuery = GetItemById
             .Replace("{ITEM_ID}", itemId)
             .Replace("{LANGUAGE}", contentRequest.Language == null ? "null" : $"\"{contentRequest.Language}\"")
-            .Replace("{VERSION}", contentRequest.Version.HasValue ? $"{contentRequest.Version.Value}" : "null");
+            .Replace("{VERSION}", contentRequest.Version.HasValue ? $"{contentRequest.Version.Value}" : "null")
+            .Replace("{OWN_FIELDS}", ownFields.ToString().ToLower())
+            .Replace("{EXCLUDE_STANDARD}", excludeStandardFields.ToString().ToLower());
         
         return finalQuery;
     }
@@ -184,7 +186,7 @@ public static class GraphQlQueries
         return SearchItems;
     }
     
-    public static string SearchItemsWithCriteriasQuery(List<CriteriaDto> criterias, List<CriteriaDto>? subCriterias = null, List<SortDto>? sorts = null)
+    public static string SearchItemsWithCriteriasQuery(List<CriteriaDto> criterias, List<CriteriaDto>? subCriterias = null, List<SortDto>? sorts = null, bool ownFields = false, bool excludeStandardFields = false)
     {
         var criteriaBuilder = new StringBuilder();
         for (int i = 0; i < criterias.Count; i++)
@@ -230,6 +232,8 @@ public static class GraphQlQueries
         return SearchItemsWithFilters
             .Replace("{CRITERIA}", criteriaBuilder.ToString())
             .Replace("{SUBSTATEMENTS}", subStatementsBuilder.Length > 0 ? subStatementsBuilder.ToString() : string.Empty)
-            .Replace("{SORT}", sortBuilder.ToString());
+            .Replace("{SORT}", sortBuilder.ToString())
+            .Replace("{OWN_FIELDS}", ownFields.ToString().ToLower())
+            .Replace("{EXCLUDE_STANDARD}", excludeStandardFields.ToString().ToLower());
     }
 }

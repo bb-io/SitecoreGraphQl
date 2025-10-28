@@ -5,6 +5,12 @@ namespace Apps.SitecoreGraphQl.Models.Requests;
 
 public class FilteringOptions
 {
+    [Display("Include only own fields")]
+    public bool IncludeOnlyOwnFields { get; set; } = false;
+    
+    [Display("Exclude standard fields")]
+    public bool ExcludeStandardFields { get; set; } = false;
+    
     [Display("Exclude fields where Value property equals")] // field.value
     public IEnumerable<string>? Value { get; set; }
 

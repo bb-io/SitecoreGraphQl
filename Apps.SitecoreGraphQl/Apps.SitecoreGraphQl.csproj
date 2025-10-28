@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <Product>Sitecore (GraphQL) [Beta]</Product>
         <Description>App to interact with Sitecore via GraphQL API.</Description>
-        <Version>1.0.1</Version>
+        <Version>1.0.2</Version>
         <AssemblyName>Apps.SitecoreGraphQl</AssemblyName>
     </PropertyGroup>
 
