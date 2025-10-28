@@ -98,9 +98,6 @@ public class TemplateFieldResponse
     [Display("Field description")]
     public string Description { get; set; } = string.Empty;
     
-    [Display("Field definition")]
-    public string Definition { get; set; } = string.Empty;
-    
     [Display("Section")]
     public SectionResponse Section { get; set; } = new();
 }
