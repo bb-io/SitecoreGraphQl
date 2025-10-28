@@ -6,7 +6,18 @@ namespace Apps.SitecoreGraphQl.Utils.Converters;
 
 public static class FieldsToHtmlConverter
 {
-    public static string ConvertToHtml(ContentMetadata contentMetadata, List<FieldResponse> fields)
+    private const string MetaRootContentId = "root-content-id";
+    private const string MetaContentId = "content-id";
+    private const string MetaVersion = "version";
+    private const string MetaSourceLanguage = "source-language";
+    
+    private const string AttrContentId = "data-content-id";
+    private const string AttrLanguage = "data-language";
+    private const string AttrVersion = "data-version";
+    private const string AttrFieldName = "data-field-name";
+    private const string AttrFieldType = "data-field-type";
+    
+    public static string ConvertToHtml(ContentMetadata rootContentMetadata, List<ContentWithFieldsEntity> fieldsEntities)
     {
         var htmlDoc = new HtmlDocument();
         var html = htmlDoc.CreateElement("html");
@@ -17,32 +28,51 @@ public static class FieldsToHtmlConverter
         html.AppendChild(head);
         html.AppendChild(body);
         
-        InjectMetadata(htmlDoc, head, contentMetadata);
-        var titleField = GetTitleField(fields);
+        InjectMetadata(htmlDoc, head, rootContentMetadata);
+        var rootEntity = fieldsEntities.FirstOrDefault(e => e.IsRootContent)
+            ?? throw new InvalidOperationException("Root content entity not found.");
+        var titleField = GetTitleField(rootEntity.Fields);
         if (titleField != null)
         {
             var title = htmlDoc.CreateElement("title");
-            title.SetAttributeValue("data-field-name", titleField.Name);
+            title.SetAttributeValue(AttrFieldName, titleField.Name);
             title.AppendChild(htmlDoc.CreateTextNode(titleField.Value));
             head.AppendChild(title);
         }
         
-        ConvertFieldsToBody(htmlDoc, body, fields, titleField?.Name);
+        ConvertFieldsToBody(htmlDoc, body, rootEntity.Fields, titleField?.Name);
+        
+        var childEntities = fieldsEntities.Where(e => !e.IsRootContent).ToList();
+        foreach (var childEntity in childEntities)
+        {
+            var childDiv = htmlDoc.CreateElement("div");
+            childDiv.SetAttributeValue(AttrContentId, childEntity.ContentId);
+            childDiv.SetAttributeValue(AttrLanguage, childEntity.SourceLanguage);
+            childDiv.SetAttributeValue(AttrVersion, childEntity.Version.ToString());
+            
+            ConvertFieldsToBody(htmlDoc, childDiv, childEntity.Fields, null);
+            body.AppendChild(childDiv);
+        }
         
         return htmlDoc.DocumentNode.OuterHtml;
     }
     
     private static void InjectMetadata(HtmlDocument htmlDoc, HtmlNode head, ContentMetadata contentMetadata)
     {
+        var rootContentIdMeta = htmlDoc.CreateElement("meta");
+        rootContentIdMeta.SetAttributeValue("name", MetaRootContentId);
+        rootContentIdMeta.SetAttributeValue("content", contentMetadata.RootContentId ?? contentMetadata.ContentId);
+        head.AppendChild(rootContentIdMeta);
+        
         var contentIdMeta = htmlDoc.CreateElement("meta");
-        contentIdMeta.SetAttributeValue("name", "content-id");
+        contentIdMeta.SetAttributeValue("name", MetaContentId);
         contentIdMeta.SetAttributeValue("content", contentMetadata.ContentId);
         head.AppendChild(contentIdMeta);
         
         if (contentMetadata.Version.HasValue)
         {
             var versionMeta = htmlDoc.CreateElement("meta");
-            versionMeta.SetAttributeValue("name", "version");
+            versionMeta.SetAttributeValue("name", MetaVersion);
             versionMeta.SetAttributeValue("content", contentMetadata.Version.Value.ToString());
             head.AppendChild(versionMeta);
         }
@@ -50,7 +80,7 @@ public static class FieldsToHtmlConverter
         if (!string.IsNullOrEmpty(contentMetadata.SourceLanguage))
         {
             var languageMeta = htmlDoc.CreateElement("meta");
-            languageMeta.SetAttributeValue("name", "source-language");
+            languageMeta.SetAttributeValue("name", MetaSourceLanguage);
             languageMeta.SetAttributeValue("content", contentMetadata.SourceLanguage);
             head.AppendChild(languageMeta);
         }
@@ -76,8 +106,7 @@ public static class FieldsToHtmlConverter
                 continue;
             
             var fieldDiv = htmlDoc.CreateElement("div");
-            fieldDiv.SetAttributeValue("data-field-name", field.Name);
-            fieldDiv.SetAttributeValue("data-field-type", "content");
+            fieldDiv.SetAttributeValue(AttrFieldName, field.Name);
             
             try
             {

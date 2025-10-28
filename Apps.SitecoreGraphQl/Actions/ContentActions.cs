@@ -3,6 +3,7 @@ using Apps.SitecoreGraphQl.Constants;
 using Apps.SitecoreGraphQl.Models.Dtos;
 using Apps.SitecoreGraphQl.Models.Requests;
 using Apps.SitecoreGraphQl.Models.Responses;
+using Apps.SitecoreGraphQl.Models.Records;
 using Apps.SitecoreGraphQl.Utils.Converters;
 using Blackbird.Applications.SDK.Blueprints;
 using Blackbird.Applications.Sdk.Common;
@@ -22,59 +23,127 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
 {
     [Action("Search content", Description = "Retrieve a list of content (items)")]
     [BlueprintActionDefinition(BlueprintAction.SearchContent)]
-    public async Task<SearchContentResponse> SearchContent([ActionParameter] SearchContentRequest searchContentRequest)
+    public async Task<SearchContentResponse> SearchContent([ActionParameter] SearchContentRequest searchContentRequest,
+        [ActionParameter] DateFilters dateFilters)
     {
-        var allItems = new List<ContentResponse>();
-        var pageSize = 25;
-        var pageIndex = 0;
-        var totalCount = 0;
-        
-        do
+        if (string.IsNullOrEmpty(searchContentRequest.Language))
         {
-            var apiRequest = new Request(CredentialsProviders)
+            throw new PluginMisconfigurationException("Language must be specified to search content.");
+        }
+        
+        var criteria = new List<CriteriaDto>();
+        
+        if (!string.IsNullOrEmpty(searchContentRequest.RootPath))
+        {
+            var pathRequest = new Request(CredentialsProviders)
                 .AddJsonBody(new
                 {
-                    query = GraphQlQueries.SearchItemsQuery(),
-                    variables = new
-                    {
-                        language = searchContentRequest.Language,
-                        pageIndex,
-                        pageSize
-                    }
+                    query = GraphQlQueries.GetItemByPathQuery(searchContentRequest.RootPath)
                 });
 
-            var searchResult = await Client.ExecuteGraphQlWithErrorHandling<SearchItemsWrapperDto>(apiRequest);
-            totalCount = searchResult.Search.TotalCount;
-            
-            foreach (var item in searchResult.Search.Results)
+            var pathResult = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(pathRequest);
+            if (pathResult.Content == null)
             {
-                if (item.InnerItem != null)
+                throw new PluginApplicationException(
+                    $"Item with path '{searchContentRequest.RootPath}' was not found. Please provide a correct item path.");
+            }
+            
+            criteria.Add(new CriteriaDto
+            {
+                Field = "_path",
+                CriteriaType = "SEARCH",
+                Operator = "MUST",
+                Value = pathResult.Content.Id
+            });
+        }
+        
+        if (dateFilters.CreatedAfter.HasValue || dateFilters.CreatedBefore.HasValue)
+        {
+            var createdRange = BuildDateRange(dateFilters.CreatedAfter, dateFilters.CreatedBefore);
+            if (!string.IsNullOrEmpty(createdRange))
+            {
+                criteria.Add(new CriteriaDto
                 {
-                    allItems.Add(item.InnerItem);
+                    Field = "__smallcreateddate",
+                    CriteriaType = "RANGE",
+                    Operator = "MUST",
+                    Value = createdRange
+                });
+            }
+        }
+        
+        if (dateFilters.UpdatedAfter.HasValue || dateFilters.UpdatedBefore.HasValue)
+        {
+            var updatedRange = BuildDateRange(dateFilters.UpdatedAfter, dateFilters.UpdatedBefore);
+            if (!string.IsNullOrEmpty(updatedRange))
+            {
+                criteria.Add(new CriteriaDto
+                {
+                    Field = "__smallupdateddate",
+                    CriteriaType = "RANGE",
+                    Operator = "MUST",
+                    Value = updatedRange
+                });
+            }
+        }
+        
+        var subCriteria = new List<CriteriaDto>();
+        if(searchContentRequest.FieldNames != null && searchContentRequest.FieldValues != null)
+        {
+            var fieldNames = searchContentRequest.FieldNames.ToList();
+            var fieldValues = searchContentRequest.FieldValues.ToList();
+            if (fieldNames.Count != fieldValues.Count)
+            {
+                throw new PluginMisconfigurationException("Field names and field values counts do not match.");
+            }
+
+            bool isMainCriteriaEmpty = criteria.Count == 0;
+            for (int i = 0; i < fieldNames.Count; i++)
+            {
+                if (isMainCriteriaEmpty)
+                {
+                    // If user doesn't provide any main criteria, we add the first field criteria to the main criteria list
+                    criteria.Add(new CriteriaDto
+                    {
+                        Field = fieldNames[i],
+                        CriteriaType = "WILDCARD",
+                        Operator = "MUST",
+                        Value = fieldValues[i]
+                    });
                 }
                 else
                 {
-                    allItems.Add(new ContentResponse
+                    subCriteria.Add(new CriteriaDto
                     {
-                        Id = item.ItemId,
-                        Name = item.Name,
-                        Path = item.Path,
-                        Version = item.Version,
-                        WorkflowInfo = new ItemWorkflowResponse(),
-                        Fields = new FieldsResponse()
+                        Field = fieldNames[i],
+                        CriteriaType = "WILDCARD",
+                        Operator = "MUST",
+                        Value = fieldValues[i]
                     });
                 }
             }
-            
-            pageIndex++;
-            
-        } while (allItems.Count < totalCount);
-
-        if (searchContentRequest.Language != null)
+        }
+        
+        var searchParams = new SearchContentParams(searchContentRequest.Language, criteria.Count > 0 ? criteria : null, subCriteria.Count > 0 ? subCriteria : null);
+        var allItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
+        
+        if(searchContentRequest.FieldNames != null && searchContentRequest.FieldValues != null)
         {
-            allItems = allItems
-                .Where(item => item.Language.Name.Equals(searchContentRequest.Language, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            // Sitecore filters is buggy, so sometimes it can return items that do not properly match to filters
+            var fieldNames = searchContentRequest.FieldNames.ToList();
+            var fieldValues = searchContentRequest.FieldValues.ToList();
+            allItems = allItems.Where(item =>
+            {
+                for (int i = 0; i < fieldNames.Count; i++)
+                {
+                    var field = item.Fields.Nodes.FirstOrDefault(f => f.Name.Equals(fieldNames[i], StringComparison.OrdinalIgnoreCase));
+                    if (field == null || field.Value == null || !field.Value.ToString().Equals(fieldValues[i], StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }).ToList();
         }
         
         return new SearchContentResponse
@@ -104,12 +173,20 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
     
     [Action("Download content", Description = "Download the content of a content (item) by its ID")]
     [BlueprintActionDefinition(BlueprintAction.DownloadContent)]
-    public async Task<FileResponse> DownloadItemContent([ActionParameter] ContentRequest contentRequest)
+    public async Task<FileResponse> DownloadItemContent([ActionParameter] ContentRequest contentRequest,
+        [ActionParameter] DownloadContentRequest downloadContentRequest,
+        [ActionParameter] FilteringOptions filteringOptions)
     {
+        if(string.IsNullOrEmpty(contentRequest.Language))
+        {
+            throw new PluginMisconfigurationException("Language must be specified to download content.");
+        }
+
+        var query = GraphQlQueries.GetItemByIdQuery(contentRequest, filteringOptions.IncludeOnlyOwnFields ?? false, filteringOptions.ExcludeStandardFields ?? false);
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {
-                query = GraphQlQueries.GetItemByIdQuery(contentRequest)
+                query
             });
 
         var item = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(apiRequest);
@@ -119,12 +196,46 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
                 $"Item with ID {contentRequest.ContentId} was not found. Please verify the ID and try again.");
         }
         
-        var htmlString = FieldsToHtmlConverter.ConvertToHtml(
-            new Models.Records.ContentMetadata(
-                contentRequest.ContentId,
-                contentRequest.Version,
-                contentRequest.Language),
-            item.Content.Fields.Nodes);
+        var fields = filteringOptions.ApplyFilteringOptions(item.Content.Fields.Nodes);
+        var rootContentMetadata = new ContentMetadata(
+            contentRequest.ContentId, 
+            contentRequest.Version, 
+            contentRequest.Language, 
+            RootContentId: contentRequest.ContentId);
+        var fieldsEntities = new List<ContentWithFieldsEntity>
+        {
+            new(item.Content.Id, item.Content.Version, item.Content.Language.Name, fields, IsRootContent: true)
+        };
+
+        if (downloadContentRequest.IncludeChildItems == true)
+        {
+            var searchParams = new SearchContentParams(
+                contentRequest.Language,
+                new List<CriteriaDto>
+                {
+                    new()
+                    {
+                        Field = "_path",
+                        CriteriaType = "SEARCH",
+                        Operator = "MUST",
+                        Value = contentRequest.ContentId
+                    }
+                });
+            
+            var childItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
+            foreach (var childItem in childItems)
+            {
+                var childFields = filteringOptions.ApplyFilteringOptions(childItem.Fields.Nodes);
+                fieldsEntities.Add(new ContentWithFieldsEntity(
+                    childItem.Id,
+                    childItem.Version,
+                    childItem.Language.Name,
+                    childFields,
+                    IsRootContent: false));
+            }
+        }
+        
+        var htmlString = FieldsToHtmlConverter.ConvertToHtml(rootContentMetadata, fieldsEntities);
         
         var bytes = System.Text.Encoding.UTF8.GetBytes(htmlString);
         var memoryStream = new MemoryStream(bytes);
@@ -156,40 +267,52 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             }
         }
 
-        var fields = HtmlToFieldsConverter.ConvertToFields(htmlString);
-        var metadata = HtmlToFieldsConverter.ExtractMetadata(htmlString);
-        metadata = metadata with
-        {
-            ContentId = uploadContentRequest.ContentId ?? metadata.ContentId,
-            TargetLanguage = uploadContentRequest.Locale ?? throw new PluginMisconfigurationException("Locale must be provided in the upload request")
-        };
+        var contentEntities = HtmlToFieldsConverter.ConvertToContentEntities(htmlString);
         
-        var targetContent = await GetContent(new ContentRequest
+        var targetLanguage = uploadContentRequest.Locale 
+            ?? throw new PluginMisconfigurationException("Locale must be provided in the upload request");
+        foreach (var entity in contentEntities)
         {
-            ContentId = metadata.ContentId,
-            Language = metadata.TargetLanguage
-        });
-
-        if (targetContent.Version == 0)
-        {
-            var createItemVersionMutation = GraphQlMutations.AddItemVersionMutation(metadata.ContentId, metadata.TargetLanguage);
-            var createVersionRequest = new Request(CredentialsProviders)
-                .AddJsonBody(new
-                {
-                    query = createItemVersionMutation
-                });
-            
-            await Client.ExecuteGraphQlWithErrorHandling<AddItemVersionWrapperDto>(createVersionRequest);
-        }
-        
-        var mutation = GraphQlMutations.UpdateItemMutation(metadata, fields);
-        var apiRequest = new Request(CredentialsProviders)
-            .AddJsonBody(new
+            var contentId = entity.ContentId;
+            if (entity.IsRootContent && !string.IsNullOrEmpty(uploadContentRequest.ContentId))
             {
-                query = mutation
+                contentId = uploadContentRequest.ContentId;
+            }
+            
+            var targetContent = await GetContent(new ContentRequest
+            {
+                ContentId = contentId,
+                Language = targetLanguage
             });
 
-        await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
+            if (targetContent.Version == 0)
+            {
+                var createItemVersionMutation = GraphQlMutations.AddItemVersionMutation(contentId, targetLanguage);
+                var createVersionRequest = new Request(CredentialsProviders)
+                    .AddJsonBody(new
+                    {
+                        query = createItemVersionMutation
+                    });
+                
+                await Client.ExecuteGraphQlWithErrorHandling<AddItemVersionWrapperDto>(createVersionRequest);
+            }
+            
+            var entityMetadata = new ContentMetadata(
+                contentId,
+                entity.Version,
+                entity.SourceLanguage,
+                TargetLanguage: targetLanguage
+            );
+            
+            var mutation = GraphQlMutations.UpdateItemMutation(entityMetadata, entity.Fields);
+            var apiRequest = new Request(CredentialsProviders)
+                .AddJsonBody(new
+                {
+                    query = mutation
+                });
+
+            await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
+        }
     }
     
     
@@ -208,5 +331,17 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             throw new PluginApplicationException(
                 $"Failed to delete item with ID {contentRequest.ContentId}. Please verify the ID and try again.");
         }
+    }
+    
+    private static string? BuildDateRange(DateTime? fromDate, DateTime? toDate)
+    {
+        var from = fromDate?.ToString("yyyy-MM-ddTHH:mm:ssZ") ?? "*";
+        var to = toDate?.ToString("yyyy-MM-ddTHH:mm:ssZ") ?? "NOW";
+        if (from == "*" && to == "NOW")
+        {
+            return null;
+        }
+        
+        return $"[{from} TO {to}]";
     }
 }

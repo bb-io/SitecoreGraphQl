@@ -63,6 +63,7 @@ Once connected, you can begin using the available actions and events within your
 - **Download content**  
   Download the full content of a Sitecore item as an HTML file.  
   This allows further processing, translation, or storage in localization systems.
+  It's possible to inlude child items into file as well by enabling `Include child items` option. Also, using filtering options you can specify which fields should be included in the downloaded HTML.
 
 - **Upload content**  
   Upload translated or modified content back into Sitecore.  

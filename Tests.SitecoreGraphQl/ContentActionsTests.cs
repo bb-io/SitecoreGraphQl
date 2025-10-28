@@ -13,13 +13,56 @@ public class ContentActionsTests : TestBase
         var itemActions = new ContentActions(InvocationContext, FileManager);
         var searchRequest = new SearchContentRequest
         {
-            Language = "en",
+            Language = "en"
         };
         
-        var result = await itemActions.SearchContent(searchRequest);
+        var result = await itemActions.SearchContent(searchRequest, new());
         
         Assert.IsNotNull(result);
         Assert.IsTrue(result.Items.Count() > 0);
+        
+        Console.WriteLine($"Total items: {result.Items.Count()}");
+        PrintObject(result);
+    }
+
+    [TestMethod]
+    public async Task SearchContent_WithRootPath_Success()
+    {
+        var itemActions = new ContentActions(InvocationContext, FileManager);
+        var searchRequest = new SearchContentRequest
+        {
+            RootPath = "/sitecore/content/bb/blackbird/home/partners/data"
+        };
+        
+        var result = await itemActions.SearchContent(searchRequest, new());
+        
+        Assert.IsNotNull(result);
+        Assert.IsTrue(result.Items.Count() > 0);
+        
+        Console.WriteLine($"Total items: {result.Items.Count()}");
+        PrintObject(result);
+    }
+
+    [TestMethod]
+    public async Task SearchContent_WithDateFilters_Success()
+    {
+        
+        var itemActions = new ContentActions(InvocationContext, FileManager);
+        var searchRequest = new SearchContentRequest()
+        {
+            RootPath = "/sitecore/content/bb/blackbird/home/partners/data"
+        };
+        var dateFilters = new DateFilters
+        {
+            CreatedAfter = DateTime.Now.AddMonths(-3)
+        };
+        
+        var result = await itemActions.SearchContent(searchRequest, dateFilters);
+        
+        Assert.IsNotNull(result);
+        Assert.IsTrue(result.Items.Count() > 0);
+        
+        Console.WriteLine($"Total items: {result.Items.Count()}");
         PrintObject(result);
     }
     
