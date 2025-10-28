@@ -6,41 +6,51 @@ namespace Apps.SitecoreGraphQl.Utils.Converters;
 
 public static class HtmlToFieldsConverter
 {
-    public static List<FieldResponse> ConvertToFields(string htmlContent)
+    public static List<ContentWithFieldsEntity> ConvertToContentEntities(string htmlContent)
     {
-        var fields = new List<FieldResponse>();
+        var entities = new List<ContentWithFieldsEntity>();
         var doc = new HtmlDocument();
         doc.LoadHtml(htmlContent);
         
-        var titleNode = doc.DocumentNode.SelectSingleNode("//title");
-        if (titleNode != null && !string.IsNullOrWhiteSpace(titleNode.InnerText))
+        var metadata = ExtractMetadata(htmlContent);
+        var rootFields = ExtractRootFields(doc);
+        if (rootFields.Count > 0)
         {
-            var fieldName = titleNode.GetAttributeValue("data-field-name", "Title");
-            fields.Add(new FieldResponse
-            {
-                Name = fieldName,
-                Value = titleNode.InnerText
-            });
+            entities.Add(new ContentWithFieldsEntity(
+                metadata.ContentId,
+                metadata.Version ?? 1,
+                metadata.SourceLanguage ?? "en",
+                rootFields,
+                IsRootContent: true
+            ));
         }
         
-        var fieldDivs = doc.DocumentNode.SelectNodes("//body//div[@data-field-name]");
-        if (fieldDivs != null)
+        // Extract child items
+        var childDivs = doc.DocumentNode.SelectNodes("//body/div[@data-content-id]");
+        if (childDivs != null)
         {
-            foreach (var fieldDiv in fieldDivs)
+            foreach (var childDiv in childDivs)
             {
-                var fieldName = fieldDiv.GetAttributeValue("data-field-name", string.Empty);
-                if (!string.IsNullOrEmpty(fieldName))
+                var contentId = childDiv.GetAttributeValue("data-content-id", string.Empty);
+                var language = childDiv.GetAttributeValue("data-language", metadata.SourceLanguage ?? "en");
+                var versionStr = childDiv.GetAttributeValue("data-version", "1");
+                int.TryParse(versionStr, out var version);
+                
+                var childFields = ExtractFieldsFromNode(childDiv);
+                if (!string.IsNullOrEmpty(contentId) && childFields.Count > 0)
                 {
-                    fields.Add(new FieldResponse
-                    {
-                        Name = fieldName,
-                        Value = fieldDiv.InnerHtml
-                    });
+                    entities.Add(new ContentWithFieldsEntity(
+                        contentId,
+                        version,
+                        language,
+                        childFields,
+                        IsRootContent: false
+                    ));
                 }
             }
         }
         
-        return fields;
+        return entities;
     }
     
     public static ContentMetadata ExtractMetadata(string htmlContent)
@@ -49,8 +59,15 @@ public static class HtmlToFieldsConverter
         doc.LoadHtml(htmlContent);
         
         var contentId = string.Empty;
+        var rootContentId = string.Empty;
         int? version = null;
         string? sourceLanguage = null;
+        
+        var rootContentIdMeta = doc.DocumentNode.SelectSingleNode("//meta[@name='root-content-id']");
+        if (rootContentIdMeta != null)
+        {
+            rootContentId = rootContentIdMeta.GetAttributeValue("content", string.Empty);
+        }
         
         var contentIdMeta = doc.DocumentNode.SelectSingleNode("//meta[@name='content-id']");
         if (contentIdMeta != null)
@@ -78,6 +95,74 @@ public static class HtmlToFieldsConverter
             }
         }
         
-        return new ContentMetadata(contentId, version, sourceLanguage);
+        return new ContentMetadata(contentId, version, sourceLanguage, RootContentId: rootContentId);
+    }
+    
+    private static List<FieldResponse> ExtractRootFields(HtmlDocument doc)
+    {
+        var fields = new List<FieldResponse>();
+        
+        // Extract title field
+        var titleNode = doc.DocumentNode.SelectSingleNode("//title");
+        if (titleNode != null && !string.IsNullOrWhiteSpace(titleNode.InnerText))
+        {
+            var fieldName = titleNode.GetAttributeValue("data-field-name", "Title");
+            fields.Add(new FieldResponse
+            {
+                Name = fieldName,
+                Value = titleNode.InnerText
+            });
+        }
+        
+        // Extract fields from body that are not child content divs
+        var bodyNode = doc.DocumentNode.SelectSingleNode("//body");
+        if (bodyNode != null)
+        {
+            foreach (var childNode in bodyNode.ChildNodes)
+            {
+                if (childNode.NodeType != HtmlNodeType.Element || childNode.Name != "div")
+                    continue;
+                
+                // Skip child content divs (they have data-content-id attribute)
+                if (childNode.Attributes.Contains("data-content-id"))
+                    continue;
+                
+                var fieldName = childNode.GetAttributeValue("data-field-name", string.Empty);
+                if (!string.IsNullOrEmpty(fieldName))
+                {
+                    fields.Add(new FieldResponse
+                    {
+                        Name = fieldName,
+                        Value = childNode.InnerHtml
+                    });
+                }
+            }
+        }
+        
+        return fields;
+    }
+    
+    private static List<FieldResponse> ExtractFieldsFromNode(HtmlNode node)
+    {
+        var fields = new List<FieldResponse>();
+        var fieldDivs = node.SelectNodes(".//div[@data-field-name]");
+        
+        if (fieldDivs != null)
+        {
+            foreach (var fieldDiv in fieldDivs)
+            {
+                var fieldName = fieldDiv.GetAttributeValue("data-field-name", string.Empty);
+                if (!string.IsNullOrEmpty(fieldName))
+                {
+                    fields.Add(new FieldResponse
+                    {
+                        Name = fieldName,
+                        Value = fieldDiv.InnerHtml
+                    });
+                }
+            }
+        }
+        
+        return fields;
     }
 }

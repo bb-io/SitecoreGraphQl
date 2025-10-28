@@ -206,40 +206,52 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             }
         }
 
-        var fields = HtmlToFieldsConverter.ConvertToFields(htmlString);
-        var metadata = HtmlToFieldsConverter.ExtractMetadata(htmlString);
-        metadata = metadata with
-        {
-            ContentId = uploadContentRequest.ContentId ?? metadata.ContentId,
-            TargetLanguage = uploadContentRequest.Locale ?? throw new PluginMisconfigurationException("Locale must be provided in the upload request")
-        };
+        var contentEntities = HtmlToFieldsConverter.ConvertToContentEntities(htmlString);
         
-        var targetContent = await GetContent(new ContentRequest
+        var targetLanguage = uploadContentRequest.Locale 
+            ?? throw new PluginMisconfigurationException("Locale must be provided in the upload request");
+        foreach (var entity in contentEntities)
         {
-            ContentId = metadata.ContentId,
-            Language = metadata.TargetLanguage
-        });
-
-        if (targetContent.Version == 0)
-        {
-            var createItemVersionMutation = GraphQlMutations.AddItemVersionMutation(metadata.ContentId, metadata.TargetLanguage);
-            var createVersionRequest = new Request(CredentialsProviders)
-                .AddJsonBody(new
-                {
-                    query = createItemVersionMutation
-                });
-            
-            await Client.ExecuteGraphQlWithErrorHandling<AddItemVersionWrapperDto>(createVersionRequest);
-        }
-        
-        var mutation = GraphQlMutations.UpdateItemMutation(metadata, fields);
-        var apiRequest = new Request(CredentialsProviders)
-            .AddJsonBody(new
+            var contentId = entity.ContentId;
+            if (entity.IsRootContent && !string.IsNullOrEmpty(uploadContentRequest.ContentId))
             {
-                query = mutation
+                contentId = uploadContentRequest.ContentId;
+            }
+            
+            var targetContent = await GetContent(new ContentRequest
+            {
+                ContentId = contentId,
+                Language = targetLanguage
             });
 
-        await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
+            if (targetContent.Version == 0)
+            {
+                var createItemVersionMutation = GraphQlMutations.AddItemVersionMutation(contentId, targetLanguage);
+                var createVersionRequest = new Request(CredentialsProviders)
+                    .AddJsonBody(new
+                    {
+                        query = createItemVersionMutation
+                    });
+                
+                await Client.ExecuteGraphQlWithErrorHandling<AddItemVersionWrapperDto>(createVersionRequest);
+            }
+            
+            var entityMetadata = new ContentMetadata(
+                contentId,
+                entity.Version,
+                entity.SourceLanguage,
+                TargetLanguage: targetLanguage
+            );
+            
+            var mutation = GraphQlMutations.UpdateItemMutation(entityMetadata, entity.Fields);
+            var apiRequest = new Request(CredentialsProviders)
+                .AddJsonBody(new
+                {
+                    query = mutation
+                });
+
+            //await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
+        }
     }
     
     
