@@ -26,6 +26,11 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
     public async Task<SearchContentResponse> SearchContent([ActionParameter] SearchContentRequest searchContentRequest,
         [ActionParameter] DateFilters dateFilters)
     {
+        if (string.IsNullOrEmpty(searchContentRequest.Language))
+        {
+            throw new PluginMisconfigurationException("Language must be specified to search content.");
+        }
+        
         var criteria = new List<CriteriaDto>();
         
         if (!string.IsNullOrEmpty(searchContentRequest.RootPath))
@@ -82,8 +87,64 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             }
         }
         
-        var searchParams = new SearchContentParams(searchContentRequest.Language, criteria.Count > 0 ? criteria : null);
+        var subCriteria = new List<CriteriaDto>();
+        if(searchContentRequest.FieldNames != null && searchContentRequest.FieldValues != null)
+        {
+            var fieldNames = searchContentRequest.FieldNames.ToList();
+            var fieldValues = searchContentRequest.FieldValues.ToList();
+            if (fieldNames.Count != fieldValues.Count)
+            {
+                throw new PluginMisconfigurationException("Field names and field values counts do not match.");
+            }
+
+            bool isMainCriteriaEmpty = criteria.Count == 0;
+            for (int i = 0; i < fieldNames.Count; i++)
+            {
+                if (isMainCriteriaEmpty)
+                {
+                    // If user doesn't provide any main criteria, we add the first field criteria to the main criteria list
+                    criteria.Add(new CriteriaDto
+                    {
+                        Field = fieldNames[i],
+                        CriteriaType = "WILDCARD",
+                        Operator = "MUST",
+                        Value = fieldValues[i]
+                    });
+                }
+                else
+                {
+                    subCriteria.Add(new CriteriaDto
+                    {
+                        Field = fieldNames[i],
+                        CriteriaType = "WILDCARD",
+                        Operator = "MUST",
+                        Value = fieldValues[i]
+                    });
+                }
+            }
+        }
+        
+        var searchParams = new SearchContentParams(searchContentRequest.Language, criteria.Count > 0 ? criteria : null, subCriteria.Count > 0 ? subCriteria : null);
         var allItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
+        
+        if(searchContentRequest.FieldNames != null && searchContentRequest.FieldValues != null)
+        {
+            // Sitecore filters is buggy, so sometimes it can return items that do not properly match to filters
+            var fieldNames = searchContentRequest.FieldNames.ToList();
+            var fieldValues = searchContentRequest.FieldValues.ToList();
+            allItems = allItems.Where(item =>
+            {
+                for (int i = 0; i < fieldNames.Count; i++)
+                {
+                    var field = item.Fields.Nodes.FirstOrDefault(f => f.Name.Equals(fieldNames[i], StringComparison.OrdinalIgnoreCase));
+                    if (field == null || field.Value == null || !field.Value.ToString().Contains(fieldValues[i], StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }).ToList();
+        }
         
         return new SearchContentResponse
         {

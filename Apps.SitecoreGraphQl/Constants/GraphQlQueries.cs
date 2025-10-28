@@ -10,7 +10,7 @@ public static class GraphQlQueries
     
     private const string GetItemById = @"query { item( where: { database: ""master"", itemId: ""{ITEM_ID}"", language: {LANGUAGE}, version: {VERSION} }) { itemId name displayName path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: false, excludeStandardFields: false) { nodes { name value templateField { name type key typeKey title(language: {LANGUAGE}) toolTip(language: {LANGUAGE}) description(language: {LANGUAGE}) section { itemTemplateSectionId key name } } } } } }";
     
-    private const string GetItemByPath = @"query { item( where: { database: ""master"", path: ""{ITEM_PATH}"" }) { itemId name displayName path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: false, excludeStandardFields: false) { nodes { name value templateField { name type key typeKey title toolTip description section { itemTemplateSectionId key name } } } } } }";
+    private const string GetItemByPath = @"query { item( where: { database: ""master"", path: ""{ITEM_PATH}"" }) { itemId name displayName path version language { name } workflow { workflowState { stateId displayName } workflow { workflowId displayName } } fields(ownFields: false, excludeStandardFields: false) { nodes { name value templateField { name type key typeKey section { itemTemplateSectionId key name } } } } } }";
     
     private const string GetWorkflowCommands = @"query GetWorkflowCommands( $workflowId: String!, $stateId: String! ) { workflow(where: { workflowId: $workflowId }) { workflowId displayName commands(query: { stateId: $stateId }) { nodes { commandId displayName } pageInfo { hasNextPage endCursor } } } }";
     
@@ -90,6 +90,7 @@ public static class GraphQlQueries
         criteria: [
           {CRITERIA}
         ]
+        {SUBSTATEMENTS}
       }
       sort: [ {SORT} ]
     }
@@ -183,7 +184,7 @@ public static class GraphQlQueries
         return SearchItems;
     }
     
-    public static string SearchItemsWithCriteriasQuery(List<CriteriaDto> criterias, List<SortDto>? sorts = null)
+    public static string SearchItemsWithCriteriasQuery(List<CriteriaDto> criterias, List<CriteriaDto>? subCriterias = null, List<SortDto>? sorts = null)
     {
         var criteriaBuilder = new StringBuilder();
         for (int i = 0; i < criterias.Count; i++)
@@ -196,25 +197,39 @@ public static class GraphQlQueries
             }
         }
         
-        if(sorts == null)
+        var subStatementsBuilder = new StringBuilder();
+        if (subCriterias != null && subCriterias.Count > 0)
         {
-            return SearchItemsWithFilters.Replace("{CRITERIA}", criteriaBuilder.ToString())
-              .Replace("{SORT}", string.Empty);
+            subStatementsBuilder.Append("subStatements: [ { operator: MUST, criteria: [ ");
+            for (int i = 0; i < subCriterias.Count; i++)
+            {
+                var subCriteria = subCriterias[i];
+                subStatementsBuilder.Append($"{{ field: \"{subCriteria.Field}\", criteriaType: {subCriteria.CriteriaType}, operator: {subCriteria.Operator}, value: \"{subCriteria.Value}\" }}");
+                if (i < subCriterias.Count - 1)
+                {
+                    subStatementsBuilder.Append(", ");
+                }
+            }
+            subStatementsBuilder.Append(" ] } ]");
         }
         
         var sortBuilder = new StringBuilder();
-        for (int i = 0; i < sorts.Count; i++)
+        if (sorts != null && sorts.Count > 0)
         {
-            var sort = sorts[i];
-            sortBuilder.Append($"{{ field: \"{sort.Field}\", direction: {sort.Direction} }}");
-            if (i < sorts.Count - 1)
+            for (int i = 0; i < sorts.Count; i++)
             {
-                sortBuilder.Append(", ");
+                var sort = sorts[i];
+                sortBuilder.Append($"{{ field: \"{sort.Field}\", direction: {sort.Direction} }}");
+                if (i < sorts.Count - 1)
+                {
+                    sortBuilder.Append(", ");
+                }
             }
         }
         
         return SearchItemsWithFilters
             .Replace("{CRITERIA}", criteriaBuilder.ToString())
+            .Replace("{SUBSTATEMENTS}", subStatementsBuilder.Length > 0 ? subStatementsBuilder.ToString() : string.Empty)
             .Replace("{SORT}", sortBuilder.ToString());
     }
 }

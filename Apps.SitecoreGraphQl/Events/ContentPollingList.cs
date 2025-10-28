@@ -82,8 +82,65 @@ public class ContentPollingList(InvocationContext invocationContext) : Invocable
             Value = sinceRange
         });
         
-        var searchParams = new SearchContentParams(searchContentRequest.Language, criteria);
+        var subCriteria = new List<CriteriaDto>();
+        if(searchContentRequest.FieldNames != null && searchContentRequest.FieldValues != null)
+        {
+            var fieldNames = searchContentRequest.FieldNames.ToList();
+            var fieldValues = searchContentRequest.FieldValues.ToList();
+            if (fieldNames.Count != fieldValues.Count)
+            {
+                throw new PluginMisconfigurationException("Field names and field values counts do not match.");
+            }
+
+            bool isMainCriteriaEmpty = criteria.Count == 0;
+            for (int i = 0; i < fieldNames.Count; i++)
+            {
+                if (isMainCriteriaEmpty)
+                {
+                    // If user doesn't provide any main criteria, we add the first field criteria to the main criteria list
+                    criteria.Add(new CriteriaDto
+                    {
+                        Field = fieldNames[i],
+                        CriteriaType = "WILDCARD",
+                        Operator = "MUST",
+                        Value = fieldValues[i]
+                    });
+                }
+                else
+                {
+                    subCriteria.Add(new CriteriaDto
+                    {
+                        Field = fieldNames[i],
+                        CriteriaType = "WILDCARD",
+                        Operator = "MUST",
+                        Value = fieldValues[i]
+                    });
+                }
+            }
+        }
+        
+        subCriteria = subCriteria.Count == 0 ? null : subCriteria;
+        var searchParams = new SearchContentParams(searchContentRequest.Language, criteria, subCriteria);
         var allItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
+        
+        if(searchContentRequest.FieldNames != null && searchContentRequest.FieldValues != null)
+        {
+            // Filter the results again to ensure all field name/value pairs are matched
+            var fieldNames = searchContentRequest.FieldNames.ToList();
+            var fieldValues = searchContentRequest.FieldValues.ToList();
+            allItems = allItems.Where(item =>
+            {
+                for (int i = 0; i < fieldNames.Count; i++)
+                {
+                    var field = item.Fields.Nodes.FirstOrDefault(f => f.Name.Equals(fieldNames[i], StringComparison.OrdinalIgnoreCase));
+                    if (field == null || field.Value == null || !field.Value.ToString().Contains(fieldValues[i], StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }).ToList();
+        }
         
         return new PollingEventResponse<DateMemory, SearchContentResponse>
         {
