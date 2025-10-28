@@ -311,7 +311,7 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
                     query = mutation
                 });
 
-            //await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
+            await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
         }
     }
     

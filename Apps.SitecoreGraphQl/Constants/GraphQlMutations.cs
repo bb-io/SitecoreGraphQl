@@ -44,7 +44,7 @@ public static class GraphQlMutations
         for (int i = 0; i < fields.Count; i++)
         {
             var field = fields[i];
-            fieldsBuilder.Append($"{{ name: \"{field.Name}\", value: \"{field.Value.Replace("\"", "\\\"")}\" }}");
+            fieldsBuilder.Append($"{{ name: \"{field.Name}\", value: \"{EscapeGraphQLString(field.Value)}\" }}");
             if (i < fields.Count - 1)
             {
                 fieldsBuilder.Append(" ");
@@ -63,5 +63,18 @@ public static class GraphQlMutations
         return AddItemVersion
             .Replace("{ITEM_ID}", itemId)
             .Replace("{LANGUAGE}", language);
+    }
+    
+    private static string EscapeGraphQLString(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+            
+        return value
+            .Replace("\\", "\\\\")  // Backslash must be escaped first
+            .Replace("\"", "\\\"")  // Double quotes
+            .Replace("\n", "\\n")   // Newlines
+            .Replace("\r", "\\r")   // Carriage returns
+            .Replace("\t", "\\t");  // Tabs
     }
 }
