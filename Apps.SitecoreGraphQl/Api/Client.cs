@@ -40,7 +40,9 @@ public class Client(List<AuthenticationCredentialsProvider> creds) : BlackBirdRe
                 var query = GraphQlQueries.SearchItemsWithCriteriasQuery(
                     searchParams.Criteria, 
                     searchParams.subCriterias, 
-                    searchParams.Sort);
+                    searchParams.Sort,
+                    searchParams.IncludeOnlyOwnFields,
+                    searchParams.ExcludeStandardFields);
                 apiRequest.AddJsonBody(new
                 {
                     query,
