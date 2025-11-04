@@ -153,7 +153,7 @@ public static class GraphQlQueries
         return GetLanguages;
     }
     
-    public static string GetItemByIdQuery(ContentRequest contentRequest, bool ownFields = false, bool excludeStandardFields = false)
+    public static string GetItemByIdQuery(ContentRequest contentRequest, bool ownFields = false, bool excludeStandardFields = true)
     {
         var itemId = contentRequest.GetContentId();
         var finalQuery = GetItemById
@@ -186,7 +186,7 @@ public static class GraphQlQueries
         return SearchItems;
     }
     
-    public static string SearchItemsWithCriteriasQuery(List<CriteriaDto> criterias, List<CriteriaDto>? subCriterias = null, List<SortDto>? sorts = null, bool ownFields = false, bool excludeStandardFields = false)
+    public static string SearchItemsWithCriteriasQuery(List<CriteriaDto> criterias, List<CriteriaDto>? subCriterias = null, List<SortDto>? sorts = null, bool ownFields = false, bool excludeStandardFields = true)
     {
         var criteriaBuilder = new StringBuilder();
         for (int i = 0; i < criterias.Count; i++)

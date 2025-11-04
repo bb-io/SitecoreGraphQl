@@ -182,7 +182,7 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             throw new PluginMisconfigurationException("Language must be specified to download content.");
         }
 
-        var query = GraphQlQueries.GetItemByIdQuery(contentRequest, filteringOptions.IncludeOnlyOwnFields ?? false, filteringOptions.ExcludeStandardFields ?? false);
+        var query = GraphQlQueries.GetItemByIdQuery(contentRequest, filteringOptions.IncludeOnlyOwnFields ?? false, filteringOptions.ExcludeStandardFields ?? true);
         var apiRequest = new Request(CredentialsProviders)
             .AddJsonBody(new
             {
@@ -209,20 +209,67 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
 
         if (downloadContentRequest.IncludeChildItems == true)
         {
+            var criteria = new List<CriteriaDto>
+            {
+                new()
+                {
+                    Field = "_path",
+                    CriteriaType = "SEARCH",
+                    Operator = "MUST",
+                    Value = contentRequest.ContentId
+                }
+            };
+            
+            var subCriteria = new List<CriteriaDto>();
+            if (downloadContentRequest.FieldNames != null && downloadContentRequest.FieldValues != null)
+            {
+                var fieldNames = downloadContentRequest.FieldNames.ToList();
+                var fieldValues = downloadContentRequest.FieldValues.ToList();
+                if (fieldNames.Count != fieldValues.Count)
+                {
+                    throw new PluginMisconfigurationException("Field names and field values counts do not match.");
+                }
+
+                for (int i = 0; i < fieldNames.Count; i++)
+                {
+                    subCriteria.Add(new CriteriaDto
+                    {
+                        Field = fieldNames[i],
+                        CriteriaType = "WILDCARD",
+                        Operator = "MUST",
+                        Value = fieldValues[i]
+                    });
+                }
+            }
+            
             var searchParams = new SearchContentParams(
                 contentRequest.Language,
-                new List<CriteriaDto>
-                {
-                    new()
-                    {
-                        Field = "_path",
-                        CriteriaType = "SEARCH",
-                        Operator = "MUST",
-                        Value = contentRequest.ContentId
-                    }
-                });
+                criteria,
+                subCriteria.Count > 0 ? subCriteria : null,
+                IncludeOnlyOwnFields: filteringOptions.IncludeOnlyOwnFields ?? false,
+                ExcludeStandardFields: filteringOptions.ExcludeStandardFields ?? true);
             
             var childItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
+            
+            // Apply in-memory filtering to ensure correct results (Sitecore filters can be buggy)
+            if (downloadContentRequest.FieldNames != null && downloadContentRequest.FieldValues != null)
+            {
+                var fieldNames = downloadContentRequest.FieldNames.ToList();
+                var fieldValues = downloadContentRequest.FieldValues.ToList();
+                childItems = childItems.Where(childItem =>
+                {
+                    for (int i = 0; i < fieldNames.Count; i++)
+                    {
+                        var field = childItem.Fields.Nodes.FirstOrDefault(f => f.Name.Equals(fieldNames[i], StringComparison.OrdinalIgnoreCase));
+                        if (field == null || field.Value == null || !field.Value.ToString().Contains(fieldValues[i], StringComparison.OrdinalIgnoreCase))
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                }).ToList();
+            }
+            
             foreach (var childItem in childItems)
             {
                 var childFields = filteringOptions.ApplyFilteringOptions(childItem.Fields.Nodes);
