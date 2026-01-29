@@ -129,7 +129,7 @@ public class ContentActionsTests : TestBase
             ContentId = "{A6D76C0C-5CC9-4AE1-BD63-E3B6DADAAFA8}"
         };
         
-        var result = await itemActions.DownloadItemContent(itemRequest);
+        var result = await itemActions.DownloadItemContent(itemRequest, new(), new());
         
         Assert.IsNotNull(result);
         Assert.IsNotNull(result.Content.Name);
