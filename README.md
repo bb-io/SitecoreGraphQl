@@ -14,41 +14,72 @@ Unlike the previous generation, which required a custom plugin installation on y
 
 For the legacy plugin-based version of this integration, see [Blackbird.io Sitecore XM Cloud (Plugin)](https://docs.blackbird.io/apps/sitecore-xm-cloud/).
 
-## Requirements
+## Before setting up
 
-Before setting up the connection, ensure the following:
+Before you can connect you need to make sure that:
 
-- You are using **Sitecore version 10.3 or higher**.
-- The **GraphQL API** feature is enabled for your Sitecore instance.
+### For Sitecore XM Cloud
+
+- You have a **Sitecore XM Cloud** instance.
 - You have a **Client ID** and **Client Secret** available from your XM Cloud credentials.
-- You know your **Sitecore base URL** (e.g., `https://your-instance.sitecorecloud.io`).
+- You know your **Sitecore base URL** (e.g., `https://xmc-yourorg-yourinstance.sitecorecloud.io`).
+
+### For Sitecore XP
+
+- You are using **Sitecore XP version 10.3 or higher**.
+- The **GraphQL API** feature is enabled for your Sitecore instance.
+- **Sitecore Identity Server** is configured and accessible.
+- You have a **Client ID** and **Client Secret** configured in your Sitecore Identity Server for OAuth2 authentication with `client_credentials` grant type.
+- You know your **Sitecore CM base URL** (e.g., `https://cm.yourdomain.com`).
+- You know your **Identity Server URL** (e.g., `https://identity.yourdomain.com`).
 
 ## Enabling GraphQL API
 
 This application interacts directly with your Sitecore instance via the built-in **GraphQL API**.
 
-To enable and configure the GraphQL endpoint in your Sitecore environment, follow the official Sitecore guide:
+### For Sitecore XP
 
-➡️ [Set up Sitecore GraphQL API](https://doc.sitecore.com/xp/en/developers/93/sitecore-experience-manager/start-using-sitecore-graphql-api.html#set-up-sitecore-graphql)
+To enable and configure the GraphQL endpoint and Identity Server authentication in your Sitecore XP environment, follow the official Sitecore guide:
 
-To verify that the GraphQL API is configured properly, you can try to go to this page: https://your-instance.sitecorecloud.io/sitecore/api/authoring/graphql/ide/
+➡️ [Walkthrough: Enabling and authorizing requests to the Authoring and Management API](https://doc.sitecore.com/xp/en/developers/latest/sitecore-experience-manager/walkthrough--enabling-and-authorizing-requests-to-the-authoring-and-management-api.html)
+
+To verify that the GraphQL API is configured properly, you can navigate to: `https://your-cm-instance.com/sitecore/api/authoring/graphql/ide/`
 
 If everything is set up correctly, you should see the GraphQL interface.
 
+### For Sitecore XM Cloud
+
+Sitecore XM Cloud comes with GraphQL API enabled by default. No additional configuration is required.
+
 ## Connecting
 
-1. In the **Blackbird** interface, navigate to **Apps** and search for **Sitecore (GraphQL)**.
-2. Click **Add Connection**.
-3. Name your connection (e.g., `My Sitecore GraphQL connection`).
-4. Provide the following parameters:
-    - **Base URL** — your Sitecore instance URL (e.g., `https://your-instance.sitecorecloud.io`).
+Navigate to apps and search for **Sitecore (GraphQL)** and click **Add Connection**. This application has two connection types: **Sitecore XM Cloud** and **Sitecore XP**. You can select the connection you need from the dropdown menu. Please give your connection a name for future reference, e.g., `My Sitecore Connection`.
+
+### Sitecore XM Cloud
+
+1. Select **Sitecore XM Cloud** connection type.
+2. Fill in the following parameters:
+    - **Base URL** — your XM Cloud instance URL (e.g., `https://xmc-yourorg-yourinstance.sitecorecloud.io`).
     - **Client ID** — from your XM Cloud credentials.
     - **Client Secret** — from your XM Cloud credentials.
-5. Click **Connect** to establish the connection.
-
-Once connected, you can begin using the available actions and events within your Blackbird workflows.
+3. Click **Connect** to establish the connection.
+4. Verify that connection was added successfully.
 
 ![connection](image/README/connection.png)
+
+### Sitecore XP
+
+1. Select **Sitecore XP** connection type.
+2. Fill in the following parameters:
+    - **Base URL** — your Sitecore CM base URL (e.g., `https://cm.yourdomain.com`).
+    - **Identity Server URL** — your Sitecore Identity Server URL (e.g., `https://identity.yourdomain.com`).
+    - **Client ID** — OAuth2 Client ID configured in Identity Server.
+    - **Client Secret** — OAuth2 Client Secret configured in Identity Server.
+    - **Scope (Optional)** — OAuth2 scope if required by your Identity Server configuration (e.g., `sitecore.api.authoring`). Leave empty if not required.
+3. Click **Connect** to establish the connection.
+4. Verify that connection was added successfully.
+
+Once connected, you can begin using the available actions and events within your Blackbird workflows.
 
 ## Actions
 
