@@ -14,7 +14,7 @@ public class ConnectionValidator: IConnectionValidator
     {
         try
         {
-            var credentialsProviders = authenticationCredentialsProviders as List<AuthenticationCredentialsProvider> ?? authenticationCredentialsProviders.ToList();
+            /*var credentialsProviders = authenticationCredentialsProviders as List<AuthenticationCredentialsProvider> ?? authenticationCredentialsProviders.ToList();
             
             var client = new Client(credentialsProviders.ToList());
             var request = new Request(credentialsProviders)
@@ -23,7 +23,7 @@ public class ConnectionValidator: IConnectionValidator
                     query = GraphQlQueries.GetLanguagesQuery(),
                 });
             
-            await client.ExecuteWithErrorHandling(request);
+            await client.ExecuteWithErrorHandling(request);*/
             return new()
             {
                 IsValid = true
