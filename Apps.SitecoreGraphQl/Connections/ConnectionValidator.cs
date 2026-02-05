@@ -12,30 +12,10 @@ public class ConnectionValidator: IConnectionValidator
         IEnumerable<AuthenticationCredentialsProvider> authenticationCredentialsProviders,
         CancellationToken cancellationToken)
     {
-        try
+        return new()
         {
-            /*var credentialsProviders = authenticationCredentialsProviders as List<AuthenticationCredentialsProvider> ?? authenticationCredentialsProviders.ToList();
-            
-            var client = new Client(credentialsProviders.ToList());
-            var request = new Request(credentialsProviders)
-                .AddJsonBody(new
-                {
-                    query = GraphQlQueries.GetLanguagesQuery(),
-                });
-            
-            await client.ExecuteWithErrorHandling(request);*/
-            return new()
-            {
-                IsValid = true
-            };
-        } 
-        catch(Exception ex)
-        {
-            return new()
-            {
-                IsValid = false,
-                Message = ex.Message
-            };
-        }
+            // Temporary solution to validate connection
+            IsValid = true
+        };
     }
 }
