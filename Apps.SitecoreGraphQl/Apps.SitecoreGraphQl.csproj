@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
@@ -6,12 +6,12 @@
         <Nullable>enable</Nullable>
         <Product>Sitecore (GraphQL) [Beta]</Product>
         <Description>App to interact with Sitecore via GraphQL API.</Description>
-        <Version>1.0.6</Version>
+        <Version>1.0.7</Version>
         <AssemblyName>Apps.SitecoreGraphQl</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Blackbird.Applications.SDK.Blueprints" Version="1.0.0-rc.10308" />
+        <PackageReference Include="Blackbird.Applications.SDK.Blueprints" Version="1.0.2" />
         <PackageReference Include="Blackbird.Applications.Sdk.Utils" Version="1.0.26" />
         <PackageReference Include="Blackbird.Filters" Version="1.1.35" />
     </ItemGroup>
