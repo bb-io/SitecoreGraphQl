@@ -4,7 +4,7 @@ using Apps.SitecoreGraphQl.Events.Models;
 using Apps.SitecoreGraphQl.Models.Dtos;
 using Apps.SitecoreGraphQl.Models.Records;
 using Apps.SitecoreGraphQl.Models.Requests;
-using Apps.SitecoreGraphQl.Models.Responses;
+using Apps.SitecoreGraphQl.Events.Response;
 using Blackbird.Applications.SDK.Blueprints;
 using Blackbird.Applications.Sdk.Common.Exceptions;
 using Blackbird.Applications.Sdk.Common.Invocation;
@@ -16,15 +16,17 @@ namespace Apps.SitecoreGraphQl.Events;
 [PollingEventList("Content")]
 public class ContentPollingList(InvocationContext invocationContext) : Invocable(invocationContext)
 {
-    [PollingEvent("On content created or updated", Description = "Polling event that periodically checks for new new or updated content. If the new or updated content is found, it will be returned as a list of content items.")]
+    [PollingEvent("On content created or updated", 
+        Description = "Polling event that periodically checks for new new or updated content. If the new or updated content is found, it will be returned as a list of content items.")]
     [BlueprintEventDefinition(BlueprintEvent.ContentCreatedOrUpdatedMultiple)]
-    public async Task<PollingEventResponse<DateMemory, SearchContentResponse>> OnContentCreatedOrUpdatedAsync(PollingEventRequest<DateMemory> request,
+    public async Task<PollingEventResponse<DateMemory, OnContentCreatedOrUpdatedResponse>> OnContentCreatedOrUpdatedAsync(
+        PollingEventRequest<DateMemory> request,
         [PollingEventParameter] SearchContentRequest searchContentRequest)
     {
         return await ProcessPollingRequest(request, searchContentRequest);
     }
 
-    private async Task<PollingEventResponse<DateMemory, SearchContentResponse>> ProcessPollingRequest(
+    private async Task<PollingEventResponse<DateMemory, OnContentCreatedOrUpdatedResponse>> ProcessPollingRequest(
         PollingEventRequest<DateMemory> request,
         SearchContentRequest searchContentRequest)
     {
@@ -142,12 +144,9 @@ public class ContentPollingList(InvocationContext invocationContext) : Invocable
             }).ToList();
         }
         
-        return new PollingEventResponse<DateMemory, SearchContentResponse>
+        return new PollingEventResponse<DateMemory, OnContentCreatedOrUpdatedResponse>
         {
-            Result = new SearchContentResponse
-            {
-                Items = allItems
-            },
+            Result = new OnContentCreatedOrUpdatedResponse(allItems.Select(x => new PollingContentResponse(x)).ToList()),
             FlyBird = allItems.Any(),
             Memory = new DateMemory
             {
