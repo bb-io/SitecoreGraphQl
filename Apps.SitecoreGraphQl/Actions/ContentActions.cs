@@ -33,7 +33,6 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
         }
         
         var criteria = new List<CriteriaDto>();
-        
         if (!string.IsNullOrEmpty(searchContentRequest.RootPath))
         {
             var pathRequest = new Request(CredentialsProviders)
