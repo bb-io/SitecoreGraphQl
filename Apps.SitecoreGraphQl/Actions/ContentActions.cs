@@ -4,6 +4,7 @@ using Apps.SitecoreGraphQl.Models.Dtos;
 using Apps.SitecoreGraphQl.Models.Requests;
 using Apps.SitecoreGraphQl.Models.Responses;
 using Apps.SitecoreGraphQl.Models.Records;
+using Apps.SitecoreGraphQl.Utils;
 using Apps.SitecoreGraphQl.Utils.Converters;
 using Blackbird.Applications.SDK.Blueprints;
 using Blackbird.Applications.Sdk.Common;
@@ -127,25 +128,6 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
         var searchParams = new SearchContentParams(searchContentRequest.Language, criteria.Count > 0 ? criteria : null, subCriteria.Count > 0 ? subCriteria : null);
         var allItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
         
-        if(searchContentRequest.FieldNames != null && searchContentRequest.FieldValues != null)
-        {
-            // Sitecore filters is buggy, so sometimes it can return items that do not properly match to filters
-            var fieldNames = searchContentRequest.FieldNames.ToList();
-            var fieldValues = searchContentRequest.FieldValues.ToList();
-            allItems = allItems.Where(item =>
-            {
-                for (int i = 0; i < fieldNames.Count; i++)
-                {
-                    var field = item.Fields.Nodes.FirstOrDefault(f => f.Name.Equals(fieldNames[i], StringComparison.OrdinalIgnoreCase));
-                    if (field == null || field.Value == null || !field.Value.ToString().Equals(fieldValues[i], StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }).ToList();
-        }
-        
         return new SearchContentResponse
         {
             Items = allItems
@@ -256,18 +238,7 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             {
                 var fieldNames = downloadContentRequest.FieldNames.ToList();
                 var fieldValues = downloadContentRequest.FieldValues.ToList();
-                childItems = childItems.Where(childItem =>
-                {
-                    for (int i = 0; i < fieldNames.Count; i++)
-                    {
-                        var field = childItem.Fields.Nodes.FirstOrDefault(f => f.Name.Equals(fieldNames[i], StringComparison.OrdinalIgnoreCase));
-                        if (field == null || field.Value == null || !field.Value.ToString().Contains(fieldValues[i], StringComparison.OrdinalIgnoreCase))
-                        {
-                            return false;
-                        }
-                    }
-                    return true;
-                }).ToList();
+                childItems = FilterItemsByFields(childItems, fieldNames, fieldValues).ToList();
             }
             
             foreach (var childItem in childItems)
@@ -390,5 +361,21 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
         }
         
         return $"[{from} TO {to}]";
+    }
+
+    private static IEnumerable<ContentResponse> FilterItemsByFields(IEnumerable<ContentResponse> items, IReadOnlyList<string> fieldNames, IReadOnlyList<string> fieldValues)
+    {
+        return items.Where(item =>
+        {
+            for (var index = 0; index < fieldNames.Count; index++)
+            {
+                if (!SearchFieldValueMatcher.Matches(item.Fields.Nodes, fieldNames[index], fieldValues[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        });
     }
 }
