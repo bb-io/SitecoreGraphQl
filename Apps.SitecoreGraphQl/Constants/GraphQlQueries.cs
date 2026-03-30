@@ -92,7 +92,7 @@ public static class GraphQlQueries
         ]
         {SUBSTATEMENTS}
       }
-      sort: [ {SORT} ]
+      {SORT}
     }
   ) {
     totalCount
@@ -188,36 +188,18 @@ public static class GraphQlQueries
     
     public static string SearchItemsWithCriteriasQuery(List<CriteriaDto> criterias, List<CriteriaDto>? subCriterias = null, List<SortDto>? sorts = null, bool ownFields = false, bool excludeStandardFields = true)
     {
-        var criteriaBuilder = new StringBuilder();
-        for (int i = 0; i < criterias.Count; i++)
-        {
-            var criteria = criterias[i];
-            criteriaBuilder.Append($"{{ field: \"{criteria.Field}\", criteriaType: {criteria.CriteriaType}, operator: {criteria.Operator}, value: \"{criteria.Value}\" }}");
-            if (i < criterias.Count - 1)
-            {
-                criteriaBuilder.Append(", ");
-            }
-        }
-        
         var subStatementsBuilder = new StringBuilder();
         if (subCriterias != null && subCriterias.Count > 0)
         {
             subStatementsBuilder.Append("subStatements: [ { operator: MUST, criteria: [ ");
-            for (int i = 0; i < subCriterias.Count; i++)
-            {
-                var subCriteria = subCriterias[i];
-                subStatementsBuilder.Append($"{{ field: \"{subCriteria.Field}\", criteriaType: {subCriteria.CriteriaType}, operator: {subCriteria.Operator}, value: \"{subCriteria.Value}\" }}");
-                if (i < subCriterias.Count - 1)
-                {
-                    subStatementsBuilder.Append(", ");
-                }
-            }
+            subStatementsBuilder.Append(BuildCriteriaList(subCriterias));
             subStatementsBuilder.Append(" ] } ]");
         }
         
         var sortBuilder = new StringBuilder();
         if (sorts != null && sorts.Count > 0)
         {
+            sortBuilder.Append("sort: [ ");
             for (int i = 0; i < sorts.Count; i++)
             {
                 var sort = sorts[i];
@@ -227,13 +209,42 @@ public static class GraphQlQueries
                     sortBuilder.Append(", ");
                 }
             }
+            
+            sortBuilder.Append(" ]");
         }
         
         return SearchItemsWithFilters
-            .Replace("{CRITERIA}", criteriaBuilder.ToString())
+            .Replace("{CRITERIA}", BuildCriteriaList(criterias))
             .Replace("{SUBSTATEMENTS}", subStatementsBuilder.Length > 0 ? subStatementsBuilder.ToString() : string.Empty)
             .Replace("{SORT}", sortBuilder.ToString())
             .Replace("{OWN_FIELDS}", ownFields.ToString().ToLower())
             .Replace("{EXCLUDE_STANDARD}", excludeStandardFields.ToString().ToLower());
+    }
+
+    private static string BuildCriteriaList(List<CriteriaDto> criteria)
+    {
+        var criteriaBuilder = new StringBuilder();
+        for (int i = 0; i < criteria.Count; i++)
+        {
+            criteriaBuilder.Append(BuildCriteria(criteria[i]));
+            if (i < criteria.Count - 1)
+            {
+                criteriaBuilder.Append(", ");
+            }
+        }
+
+        return criteriaBuilder.ToString();
+    }
+
+    private static string BuildCriteria(CriteriaDto criteria)
+    {
+        return $"{{ field: \"{EscapeGraphQlString(criteria.Field)}\", criteriaType: {criteria.CriteriaType}, operator: {criteria.Operator}, value: \"{EscapeGraphQlString(criteria.Value)}\" }}";
+    }
+
+    private static string EscapeGraphQlString(string value)
+    {
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"");
     }
 }
