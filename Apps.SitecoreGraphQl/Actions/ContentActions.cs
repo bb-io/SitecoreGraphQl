@@ -32,100 +32,27 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             throw new PluginMisconfigurationException("Language must be specified to search content.");
         }
         
-        var criteria = new List<CriteriaDto>();
-        if (!string.IsNullOrEmpty(searchContentRequest.RootPath))
-        {
-            var pathRequest = new Request(CredentialsProviders)
-                .AddJsonBody(new
-                {
-                    query = GraphQlQueries.GetItemByPathQuery(searchContentRequest.RootPath)
-                });
+        var criteria = await BuildScopeCriteriaAsync(searchContentRequest, dateFilters);
+        var fieldFilters = GetFieldFilters(searchContentRequest.FieldNames, searchContentRequest.FieldValues);
 
-            var pathResult = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(pathRequest);
-            if (pathResult.Content == null)
-            {
-                throw new PluginApplicationException(
-                    $"Item with path '{searchContentRequest.RootPath}' was not found. Please provide a correct item path.");
-            }
-            
-            criteria.Add(new CriteriaDto
-            {
-                Field = "_path",
-                CriteriaType = "SEARCH",
-                Operator = "MUST",
-                Value = pathResult.Content.Id
-            });
-        }
-        
-        if (dateFilters.CreatedAfter.HasValue || dateFilters.CreatedBefore.HasValue)
+        List<ContentResponse> allItems;
+        if (searchContentRequest.UseExactFieldValueFiltering == true && fieldFilters.Count > 0)
         {
-            var createdRange = BuildDateRange(dateFilters.CreatedAfter, dateFilters.CreatedBefore);
-            if (!string.IsNullOrEmpty(createdRange))
-            {
-                criteria.Add(new CriteriaDto
-                {
-                    Field = "__smallcreateddate",
-                    CriteriaType = "RANGE",
-                    Operator = "MUST",
-                    Value = createdRange
-                });
-            }
+            var exactSearchParams = new SearchContentParams(
+                searchContentRequest.Language,
+                criteria.Count > 0 ? criteria : null);
+            allItems = await Client.SearchContentAsync(exactSearchParams, CredentialsProviders);
+            allItems = FilterItemsByExactFieldValues(allItems, fieldFilters).ToList();
         }
-        
-        if (dateFilters.UpdatedAfter.HasValue || dateFilters.UpdatedBefore.HasValue)
+        else
         {
-            var updatedRange = BuildDateRange(dateFilters.UpdatedAfter, dateFilters.UpdatedBefore);
-            if (!string.IsNullOrEmpty(updatedRange))
-            {
-                criteria.Add(new CriteriaDto
-                {
-                    Field = "__smallupdateddate",
-                    CriteriaType = "RANGE",
-                    Operator = "MUST",
-                    Value = updatedRange
-                });
-            }
+            var subCriteria = BuildFieldSubCriteria(criteria, fieldFilters);
+            var searchParams = new SearchContentParams(
+                searchContentRequest.Language,
+                criteria.Count > 0 ? criteria : null,
+                subCriteria.Count > 0 ? subCriteria : null);
+            allItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
         }
-        
-        var subCriteria = new List<CriteriaDto>();
-        if(searchContentRequest.FieldNames != null && searchContentRequest.FieldValues != null)
-        {
-            var fieldNames = searchContentRequest.FieldNames.ToList();
-            var fieldValues = searchContentRequest.FieldValues.ToList();
-            if (fieldNames.Count != fieldValues.Count)
-            {
-                throw new PluginMisconfigurationException("Field names and field values counts do not match.");
-            }
-
-            bool isMainCriteriaEmpty = criteria.Count == 0;
-            for (int i = 0; i < fieldNames.Count; i++)
-            {
-                if (isMainCriteriaEmpty)
-                {
-                    // If user doesn't provide any main criteria, we add the first field criteria to the main criteria list
-                    criteria.Add(new CriteriaDto
-                    {
-                        Field = fieldNames[i],
-                        CriteriaType = "WILDCARD",
-                        Operator = "MUST",
-                        Value = fieldValues[i]
-                    });
-                }
-                else
-                {
-                    subCriteria.Add(new CriteriaDto
-                    {
-                        Field = fieldNames[i],
-                        CriteriaType = "WILDCARD",
-                        Operator = "MUST",
-                        Value = fieldValues[i]
-                    });
-                }
-            }
-        }
-        
-        var searchParams = new SearchContentParams(searchContentRequest.Language, criteria.Count > 0 ? criteria : null, subCriteria.Count > 0 ? subCriteria : null);
-        var allItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
         
         return new SearchContentResponse
         {
@@ -376,5 +303,120 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
 
             return true;
         });
+    }
+
+    private async Task<List<CriteriaDto>> BuildScopeCriteriaAsync(SearchContentRequest searchContentRequest, DateFilters dateFilters)
+    {
+        var criteria = new List<CriteriaDto>();
+        if (!string.IsNullOrEmpty(searchContentRequest.RootPath))
+        {
+            var pathRequest = new Request(CredentialsProviders)
+                .AddJsonBody(new
+                {
+                    query = GraphQlQueries.GetItemByPathQuery(searchContentRequest.RootPath)
+                });
+
+            var pathResult = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(pathRequest);
+            if (pathResult.Content == null)
+            {
+                throw new PluginApplicationException(
+                    $"Item with path '{searchContentRequest.RootPath}' was not found. Please provide a correct item path.");
+            }
+
+            criteria.Add(new CriteriaDto
+            {
+                Field = "_path",
+                CriteriaType = "SEARCH",
+                Operator = "MUST",
+                Value = pathResult.Content.Id
+            });
+        }
+
+        if (dateFilters.CreatedAfter.HasValue || dateFilters.CreatedBefore.HasValue)
+        {
+            var createdRange = BuildDateRange(dateFilters.CreatedAfter, dateFilters.CreatedBefore);
+            if (!string.IsNullOrEmpty(createdRange))
+            {
+                criteria.Add(new CriteriaDto
+                {
+                    Field = "__smallcreateddate",
+                    CriteriaType = "RANGE",
+                    Operator = "MUST",
+                    Value = createdRange
+                });
+            }
+        }
+
+        if (dateFilters.UpdatedAfter.HasValue || dateFilters.UpdatedBefore.HasValue)
+        {
+            var updatedRange = BuildDateRange(dateFilters.UpdatedAfter, dateFilters.UpdatedBefore);
+            if (!string.IsNullOrEmpty(updatedRange))
+            {
+                criteria.Add(new CriteriaDto
+                {
+                    Field = "__smallupdateddate",
+                    CriteriaType = "RANGE",
+                    Operator = "MUST",
+                    Value = updatedRange
+                });
+            }
+        }
+
+        return criteria;
+    }
+
+    private static List<KeyValuePair<string, string>> GetFieldFilters(IEnumerable<string>? fieldNames, IEnumerable<string>? fieldValues)
+    {
+        if (fieldNames == null || fieldValues == null)
+        {
+            return [];
+        }
+
+        var fieldNamesList = fieldNames.ToList();
+        var fieldValuesList = fieldValues.ToList();
+        if (fieldNamesList.Count != fieldValuesList.Count)
+        {
+            throw new PluginMisconfigurationException("Field names and field values counts do not match.");
+        }
+
+        var fieldFilters = new List<KeyValuePair<string, string>>();
+        for (var index = 0; index < fieldNamesList.Count; index++)
+        {
+            fieldFilters.Add(new KeyValuePair<string, string>(fieldNamesList[index], fieldValuesList[index]));
+        }
+
+        return fieldFilters;
+    }
+
+    private static List<CriteriaDto> BuildFieldSubCriteria(List<CriteriaDto> criteria, IReadOnlyList<KeyValuePair<string, string>> fieldFilters)
+    {
+        var subCriteria = new List<CriteriaDto>();
+        if (fieldFilters.Count == 0)
+        {
+            return subCriteria;
+        }
+
+        var isMainCriteriaEmpty = criteria.Count == 0;
+        foreach (var fieldFilter in fieldFilters)
+        {
+            var targetCriteriaCollection = isMainCriteriaEmpty ? criteria : subCriteria;
+            targetCriteriaCollection.Add(new CriteriaDto
+            {
+                Field = fieldFilter.Key,
+                CriteriaType = "WILDCARD",
+                Operator = "MUST",
+                Value = fieldFilter.Value
+            });
+
+            isMainCriteriaEmpty = false;
+        }
+
+        return subCriteria;
+    }
+
+    private static IEnumerable<ContentResponse> FilterItemsByExactFieldValues(IEnumerable<ContentResponse> items, IReadOnlyList<KeyValuePair<string, string>> fieldFilters)
+    {
+        return items.Where(item => fieldFilters.All(fieldFilter =>
+            SearchFieldValueMatcher.MatchesExactFieldValue(item.Fields.Nodes, fieldFilter.Key, fieldFilter.Value)));
     }
 }

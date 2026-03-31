@@ -19,7 +19,7 @@ public class SearchContentReadOnlyTests : TestBase
     private const string FilterFieldValue = "in translation";
 
     [TestMethod]
-    public async Task SearchContent_FilteredSearch_ReturnsAllRawGraphQlMatches()
+    public async Task SearchContent_DefaultFieldFiltering_MatchesCurrentGraphQlBehavior()
     {
         var rootItemId = await GetItemIdByPath(RootPath);
         var client = new Client(CredentialsProviders.ToList());
@@ -64,11 +64,12 @@ public class SearchContentReadOnlyTests : TestBase
     }
 
     [TestMethod]
-    public async Task SearchContent_FilteredSearch_DoesNotAddFalsePositivesRelativeToGraphQl()
+    public async Task SearchContent_RawGraphQl_SearchAndWildcardReturnSameFuzzyResults()
     {
         var rootItemId = await GetItemIdByPath(RootPath);
         var client = new Client(CredentialsProviders.ToList());
-        var rawItems = await client.SearchContentAsync(
+
+        var wildcardItems = await client.SearchContentAsync(
             new SearchContentParams(
                 Language,
                 [
@@ -90,6 +91,58 @@ public class SearchContentReadOnlyTests : TestBase
                     }
                 ]),
             CredentialsProviders);
+
+        var searchItems = await client.SearchContentAsync(
+            new SearchContentParams(
+                Language,
+                [
+                    new CriteriaDto
+                    {
+                        Field = "_path",
+                        CriteriaType = "SEARCH",
+                        Operator = "MUST",
+                        Value = rootItemId
+                    }
+                ],
+                [
+                    new CriteriaDto
+                    {
+                        Field = FilterFieldName,
+                        CriteriaType = "SEARCH",
+                        Operator = "MUST",
+                        Value = FilterFieldValue
+                    }
+                ]),
+            CredentialsProviders);
+
+        Assert.AreEqual(wildcardItems.Count, searchItems.Count);
+        CollectionAssert.AreEquivalent(
+            wildcardItems.Select(item => item.Id).ToList(),
+            searchItems.Select(item => item.Id).ToList(),
+            "Sitecore GraphQL search behavior should be the same for SEARCH and WILDCARD in the reproduction scenario.");
+    }
+
+    [TestMethod]
+    public async Task SearchContent_UseExactFieldValueFiltering_ReturnsScopeItemsWithExactMatches()
+    {
+        var rootItemId = await GetItemIdByPath(RootPath);
+        var client = new Client(CredentialsProviders.ToList());
+        var scopeItems = await client.SearchContentAsync(
+            new SearchContentParams(
+                Language,
+                [
+                    new CriteriaDto
+                    {
+                        Field = "_path",
+                        CriteriaType = "SEARCH",
+                        Operator = "MUST",
+                        Value = rootItemId
+                    }
+                ]),
+            CredentialsProviders);
+        var expectedItems = scopeItems
+            .Where(item => SearchFieldValueMatcher.MatchesExactFieldValue(item.Fields.Nodes, FilterFieldName, FilterFieldValue))
+            .ToList();
 
         var action = new ContentActions(InvocationContext, FileManager);
         var actionResult = await action.SearchContent(new SearchContentRequest
@@ -97,14 +150,18 @@ public class SearchContentReadOnlyTests : TestBase
             Language = Language,
             RootPath = RootPath,
             FieldNames = [FilterFieldName],
-            FieldValues = [FilterFieldValue]
+            FieldValues = [FilterFieldValue],
+            UseExactFieldValueFiltering = true
         }, new DateFilters());
 
-        Assert.IsTrue(actionResult.Items.All(item => rawItems.Any(rawItem => rawItem.Id == item.Id)));
+        CollectionAssert.AreEquivalent(
+            expectedItems.Select(item => item.Id).ToList(),
+            actionResult.Items.Select(item => item.Id).ToList(),
+            "Exact field filtering should be applied locally to the scope results.");
     }
 
     [TestMethod]
-    public async Task SearchContent_FilteredSearch_IncludesItemsThatOldExactMatchWouldMiss()
+    public async Task SearchContent_UseExactFieldValueFiltering_RemovesSitecoreSearchFalsePositives()
     {
         var rootItemId = await GetItemIdByPath(RootPath);
         var client = new Client(CredentialsProviders.ToList());
@@ -130,17 +187,23 @@ public class SearchContentReadOnlyTests : TestBase
                     }
                 ]),
             CredentialsProviders);
-
-        var itemsMissedByOldLogic = rawItems
-            .Where(item =>
-            {
-                var statusField = item.Fields.Nodes.FirstOrDefault(field => field.Name.Equals(FilterFieldName, StringComparison.OrdinalIgnoreCase));
-                return statusField == null
-                       || !statusField.Value.Equals(FilterFieldValue, StringComparison.OrdinalIgnoreCase);
-            })
+        var rawFalsePositives = rawItems
+            .Where(item => !SearchFieldValueMatcher.MatchesExactFieldValue(item.Fields.Nodes, FilterFieldName, FilterFieldValue))
+            .Select(item => item.Id)
             .ToList();
 
-        Assert.IsTrue(itemsMissedByOldLogic.Count > 0, "Expected the production reproduction data set to contain items that exact equality would miss.");
+        var action = new ContentActions(InvocationContext, FileManager);
+        var actionResult = await action.SearchContent(new SearchContentRequest
+        {
+            Language = Language,
+            RootPath = RootPath,
+            FieldNames = [FilterFieldName],
+            FieldValues = [FilterFieldValue],
+            UseExactFieldValueFiltering = true
+        }, new DateFilters());
+
+        Assert.IsTrue(rawFalsePositives.Count > 0, "Expected the Sitecore search reproduction data set to contain false positives.");
+        Assert.IsTrue(actionResult.Items.All(item => !rawFalsePositives.Contains(item.Id)));
     }
 
     [TestMethod]
@@ -149,14 +212,44 @@ public class SearchContentReadOnlyTests : TestBase
         Assert.IsTrue(SearchFieldValueMatcher.Matches(" In   Translation ", FilterFieldValue));
         Assert.IsTrue(SearchFieldValueMatcher.Matches("[\"in translation\"]", FilterFieldValue));
         Assert.IsTrue(SearchFieldValueMatcher.Matches("ready for review|in translation", FilterFieldValue));
+        Assert.IsTrue(SearchFieldValueMatcher.Matches("in translation -03/20/2026 11:42", FilterFieldValue));
     }
 
     [TestMethod]
     public void SearchFieldValueMatcher_IsCaseInsensitive_AndAvoidsFalsePositives()
     {
         Assert.IsTrue(SearchFieldValueMatcher.Matches("IN TRANSLATION", FilterFieldValue));
+        Assert.IsFalse(SearchFieldValueMatcher.Matches("translated -03/27/2026 15:11", FilterFieldValue));
         Assert.IsFalse(SearchFieldValueMatcher.Matches("not in translation", FilterFieldValue));
         Assert.IsFalse(SearchFieldValueMatcher.Matches("translation in progress", FilterFieldValue));
+    }
+
+    [TestMethod]
+    public void SearchFieldValueMatcher_MatchesExactFieldValue_ByFieldNameOrTemplateFieldKey()
+    {
+        var byNameFields = new[]
+        {
+            new Apps.SitecoreGraphQl.Models.Responses.FieldResponse
+            {
+                Name = "Status",
+                Value = " In   Translation "
+            }
+        };
+        var byTemplateKeyFields = new[]
+        {
+            new Apps.SitecoreGraphQl.Models.Responses.FieldResponse
+            {
+                Name = "Workflow state",
+                Value = "[\"in translation\"]",
+                TemplateField = new Apps.SitecoreGraphQl.Models.Responses.TemplateFieldResponse
+                {
+                    Key = "status"
+                }
+            }
+        };
+
+        Assert.IsTrue(SearchFieldValueMatcher.MatchesExactFieldValue(byNameFields, FilterFieldName, FilterFieldValue));
+        Assert.IsTrue(SearchFieldValueMatcher.MatchesExactFieldValue(byTemplateKeyFields, FilterFieldName, FilterFieldValue));
     }
 
     [TestMethod]
@@ -172,6 +265,21 @@ public class SearchContentReadOnlyTests : TestBase
         };
 
         Assert.IsTrue(SearchFieldValueMatcher.Matches(fields, FilterFieldName, FilterFieldValue));
+    }
+
+    [TestMethod]
+    public void SearchFieldValueMatcher_MatchesExactFieldValue_RequiresMatchingField()
+    {
+        var fields = new[]
+        {
+            new Apps.SitecoreGraphQl.Models.Responses.FieldResponse
+            {
+                Name = "title",
+                Value = "Example"
+            }
+        };
+
+        Assert.IsFalse(SearchFieldValueMatcher.MatchesExactFieldValue(fields, FilterFieldName, FilterFieldValue));
     }
 
     [TestMethod]
