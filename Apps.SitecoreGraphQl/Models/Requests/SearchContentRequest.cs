@@ -17,4 +17,7 @@ public class SearchContentRequest
     
     [Display("Field values")]
     public IEnumerable<string>? FieldValues { get; set; }
+
+    [Display("Use exact field value filtering", Description = "When enabled, Sitecore is used only to narrow the search scope, and field values are matched locally using exact normalized comparison.")]
+    public bool? UseExactFieldValueFiltering { get; set; }
 }

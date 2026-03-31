@@ -86,7 +86,10 @@ Once connected, you can begin using the available actions and events within your
 ### Content (items)
 
 - **Search content**  
-  Retrieve a list of Sitecore content items with pagination and language filtering.
+  Retrieve a list of Sitecore content items with pagination and language filtering.  
+  Sitecore GraphQL field filtering does not perform reliable exact value matching for text fields. Instead, it uses search/index-based matching, which may treat related terms such as `translate`, `translation`, and `translated` as equivalent.  
+  As a result, filtering by a specific field value such as `status = "in translation"` may return items with different but related values. This behavior comes from Sitecore GraphQL search itself and can vary depending on indexing and analyzers, so exact matching is not supported reliably through GraphQL alone.  
+  To ensure precise results, enable `Use exact field value filtering`. When enabled, the action uses Sitecore only for scope narrowing (`_path`, language, created/updated dates), fetches all items in that scope through pagination, and then applies exact normalized field-value filtering locally. Field matching is case-insensitive and uses either the field name or `templateField.key`. Leaving the parameter empty or `false` keeps the previous GraphQL-side behavior for backward compatibility.
 
 - **Get content information**  
   Retrieve detailed information for a specific content item by its ID.

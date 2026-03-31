@@ -35,6 +35,17 @@ public static partial class SearchFieldValueMatcher
         return candidateValues.Any(value => Matches(value, expectedValue));
     }
 
+    public static bool MatchesExactFieldValue(IEnumerable<FieldResponse> fields, string fieldName, string expectedValue)
+    {
+        var candidateValues = GetCandidateFieldValues(fields, fieldName).ToList();
+        if (candidateValues.Count == 0)
+        {
+            return false;
+        }
+
+        return candidateValues.Any(value => Matches(value, expectedValue));
+    }
+
     public static IReadOnlyCollection<string> GetCandidateFieldValues(IEnumerable<FieldResponse> fields, string fieldName)
     {
         return fields
@@ -131,6 +142,8 @@ public static partial class SearchFieldValueMatcher
     private static string Normalize(string value)
     {
         var normalizedValue = value.Trim().Trim('"');
+        normalizedValue = MultipleWhitespaceRegex().Replace(normalizedValue, " ");
+        normalizedValue = TrailingTimestampRegex().Replace(normalizedValue, string.Empty).Trim();
         return MultipleWhitespaceRegex().Replace(normalizedValue, " ");
     }
 
@@ -144,4 +157,7 @@ public static partial class SearchFieldValueMatcher
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex MultipleWhitespaceRegex();
+
+    [GeneratedRegex(@"\s*-\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?\s*$")]
+    private static partial Regex TrailingTimestampRegex();
 }
