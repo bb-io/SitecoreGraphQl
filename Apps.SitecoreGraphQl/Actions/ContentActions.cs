@@ -12,6 +12,7 @@ using Blackbird.Applications.Sdk.Common.Actions;
 using Blackbird.Applications.Sdk.Common.Exceptions;
 using Blackbird.Applications.Sdk.Common.Invocation;
 using Blackbird.Applications.SDK.Extensions.FileManagement.Interfaces;
+using Blackbird.Applications.Sdk.Utils.Extensions.Files;
 using Blackbird.Filters.Transformations;
 using Blackbird.Filters.Xliff.Xliff2;
 using RestSharp;
@@ -60,7 +61,7 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
         };
     }
     
-    [Action("Get content information", Description = "Get an content (item) by its ID")]
+    [Action("Get content", Description = "Get an content (item) by its ID")]
     public async Task<ContentResponse> GetContent([ActionParameter] ContentRequest contentRequest)
     {
         var apiRequest = new Request(CredentialsProviders)
@@ -85,178 +86,152 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
         [ActionParameter] DownloadContentRequest downloadContentRequest,
         [ActionParameter] FilteringOptions filteringOptions)
     {
-        if(string.IsNullOrEmpty(contentRequest.Language))
-        {
+        if (string.IsNullOrEmpty(contentRequest.Language))
             throw new PluginMisconfigurationException("Language must be specified to download content.");
-        }
 
-        var query = GraphQlQueries.GetItemByIdQuery(contentRequest, filteringOptions.IncludeOnlyOwnFields ?? false, filteringOptions.ExcludeStandardFields ?? true);
-        var apiRequest = new Request(CredentialsProviders)
-            .AddJsonBody(new
-            {
-                query
-            });
+        var rootItem = await FetchItemForDownloadAsync(contentRequest);
 
-        var item = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(apiRequest);
-        if (item.Content == null)
+        var entities = new List<ContentWithFieldsEntity>
         {
-            throw new PluginApplicationException(
-                $"Item with ID {contentRequest.ContentId} was not found. Please verify the ID and try again.");
-        }
-        
-        var fields = filteringOptions.ApplyFilteringOptions(item.Content.Fields.Nodes);
-        var rootContentMetadata = new ContentMetadata(
-            contentRequest.ContentId, 
-            contentRequest.Version, 
-            contentRequest.Language, 
-            RootContentId: contentRequest.ContentId);
-        var fieldsEntities = new List<ContentWithFieldsEntity>
-        {
-            new(item.Content.Id, item.Content.Version, item.Content.Language.Name, fields, IsRootContent: true)
+            ToContentEntity(rootItem, filteringOptions, isRoot: true)
         };
 
         if (downloadContentRequest.IncludeChildItems == true)
         {
-            var criteria = new List<CriteriaDto>
-            {
-                new()
-                {
-                    Field = "_path",
-                    CriteriaType = "SEARCH",
-                    Operator = "MUST",
-                    Value = contentRequest.ContentId
-                }
-            };
-            
-            var subCriteria = new List<CriteriaDto>();
-            if (downloadContentRequest.FieldNames != null && downloadContentRequest.FieldValues != null)
-            {
-                var fieldNames = downloadContentRequest.FieldNames.ToList();
-                var fieldValues = downloadContentRequest.FieldValues.ToList();
-                if (fieldNames.Count != fieldValues.Count)
-                {
-                    throw new PluginMisconfigurationException("Field names and field values counts do not match.");
-                }
-
-                for (int i = 0; i < fieldNames.Count; i++)
-                {
-                    subCriteria.Add(new CriteriaDto
-                    {
-                        Field = fieldNames[i],
-                        CriteriaType = "WILDCARD",
-                        Operator = "MUST",
-                        Value = fieldValues[i]
-                    });
-                }
-            }
-            
-            var searchParams = new SearchContentParams(
-                contentRequest.Language,
-                criteria,
-                subCriteria.Count > 0 ? subCriteria : null,
-                IncludeOnlyOwnFields: filteringOptions.IncludeOnlyOwnFields ?? false,
-                ExcludeStandardFields: filteringOptions.ExcludeStandardFields ?? true);
-            
-            var childItems = await Client.SearchContentAsync(searchParams, CredentialsProviders);
-            
-            // Apply in-memory filtering to ensure correct results (Sitecore filters can be buggy)
-            if (downloadContentRequest.FieldNames != null && downloadContentRequest.FieldValues != null)
-            {
-                var fieldNames = downloadContentRequest.FieldNames.ToList();
-                var fieldValues = downloadContentRequest.FieldValues.ToList();
-                childItems = FilterItemsByFields(childItems, fieldNames, fieldValues).ToList();
-            }
-            
-            foreach (var childItem in childItems)
-            {
-                var childFields = filteringOptions.ApplyFilteringOptions(childItem.Fields.Nodes);
-                fieldsEntities.Add(new ContentWithFieldsEntity(
-                    childItem.Id,
-                    childItem.Version,
-                    childItem.Language.Name,
-                    childFields,
-                    IsRootContent: false));
-            }
+            var childItems = await FetchChildItemsAsync(contentRequest.Language, rootItem.Id, downloadContentRequest);
+            entities.AddRange(childItems.Select(item => ToContentEntity(item, filteringOptions, isRoot: false)));
         }
-        
-        var htmlString = FieldsToHtmlConverter.ConvertToHtml(rootContentMetadata, fieldsEntities);
-        
-        var bytes = System.Text.Encoding.UTF8.GetBytes(htmlString);
-        var memoryStream = new MemoryStream(bytes);
-        memoryStream.Position = 0;
-        
-        var fileReference = await fileManagementClient.UploadAsync(memoryStream, "text/html", $"{item.Content.Name}.html");
-        return new()
-        {
-            Content = fileReference
-        };
+
+        var rootMetadata = new ContentMetadata(
+            contentRequest.ContentId,
+            contentRequest.Version,
+            contentRequest.Language,
+            RootContentId: contentRequest.ContentId);
+
+        return await BuildHtmlFileAsync(rootMetadata, entities, rootItem.Name);
     }
 
     [Action("Upload content", Description = "Upload translated content back to Sitecore")]
     [BlueprintActionDefinition(BlueprintAction.UploadContent)]
     public async Task UploadItemContent([ActionParameter] UploadContentRequest uploadContentRequest)
     {
-        var fileStream = await fileManagementClient.DownloadAsync(uploadContentRequest.Content);
-        var memoryStream = new MemoryStream();
-        await fileStream.CopyToAsync(memoryStream);
-        memoryStream.Position = 0;
+        var targetLanguage = uploadContentRequest.Locale
+                             ?? throw new PluginMisconfigurationException(
+                                 "Locale must be provided in the upload request");
 
-        var htmlString = System.Text.Encoding.UTF8.GetString(memoryStream.ToArray());
-        if (Xliff2Serializer.IsXliff2(htmlString))
-        {
-            htmlString = Transformation.Parse(htmlString, uploadContentRequest.Content.Name).Target().Serialize();
-            if (htmlString == null)
-            {
-                throw new PluginMisconfigurationException("XLIFF did not contain any files");
-            }
-        }
-
+        var htmlString = await ReadHtmlFromFileAsync(uploadContentRequest.Content);
         var contentEntities = HtmlToFieldsConverter.ConvertToContentEntities(htmlString);
-        
-        var targetLanguage = uploadContentRequest.Locale 
-            ?? throw new PluginMisconfigurationException("Locale must be provided in the upload request");
+
         foreach (var entity in contentEntities)
         {
-            var contentId = entity.ContentId;
-            if (entity.IsRootContent && !string.IsNullOrEmpty(uploadContentRequest.ContentId))
-            {
-                contentId = uploadContentRequest.ContentId;
-            }
-            
-            var targetContent = await GetContent(new ContentRequest
-            {
-                ContentId = contentId,
-                Language = targetLanguage
-            });
-
-            if (targetContent.Version == 0)
-            {
-                var createItemVersionMutation = GraphQlMutations.AddItemVersionMutation(contentId, targetLanguage);
-                var createVersionRequest = new Request(CredentialsProviders)
-                    .AddJsonBody(new
-                    {
-                        query = createItemVersionMutation
-                    });
-                
-                await Client.ExecuteGraphQlWithErrorHandling<AddItemVersionWrapperDto>(createVersionRequest);
-            }
-            
-            var entityMetadata = new ContentMetadata(
-                contentId,
-                entity.Version,
-                entity.SourceLanguage,
-                TargetLanguage: targetLanguage
-            );
-            
-            var mutation = GraphQlMutations.UpdateItemMutation(entityMetadata, entity.Fields);
-            var apiRequest = new Request(CredentialsProviders)
-                .AddJsonBody(new
-                {
-                    query = mutation
-                });
-
-            await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
+            var contentId = ResolveContentId(entity, uploadContentRequest.ContentId);
+            var targetVersion = await EnsureTargetVersionAsync(contentId, targetLanguage);
+            await UpdateItemFieldsAsync(contentId, targetVersion, entity, targetLanguage);
         }
+    }
+
+    private async Task<ContentResponse> FetchItemForDownloadAsync(ContentRequest request)
+    {
+        var query = GraphQlQueries.GetItemByIdQuery(request, ownFields: true);
+        var apiRequest = new Request(CredentialsProviders).AddJsonBody(new { query });
+        var result = await Client.ExecuteGraphQlWithErrorHandling<ItemWrapperDto>(apiRequest);
+
+        if (result.Content == null)
+            throw new PluginApplicationException(
+                $"Item with ID {request.ContentId} was not found. Please verify the ID and try again.");
+
+        return result.Content;
+    }
+
+    private static ContentWithFieldsEntity ToContentEntity(ContentResponse item, FilteringOptions filteringOptions, bool isRoot)
+    {
+        var fields = filteringOptions.ApplyFilteringOptions(item.Fields.Nodes);
+        return new ContentWithFieldsEntity(item.Id, item.Version, item.Language.Name, fields, IsRootContent: isRoot);
+    }
+
+    private async Task<List<ContentResponse>> FetchChildItemsAsync(
+        string language, string rootItemId, DownloadContentRequest request)
+    {
+        var fieldFilters = GetFieldFilters(request.FieldNames, request.FieldValues);
+
+        var pathCriteria = new List<CriteriaDto>
+        {
+            new() { Field = "_path", CriteriaType = "SEARCH", Operator = "MUST", Value = rootItemId }
+        };
+        var fieldSubCriteria = fieldFilters
+            .Select(f => new CriteriaDto { Field = f.Key, CriteriaType = "WILDCARD", Operator = "MUST", Value = f.Value })
+            .ToList();
+
+        var searchParams = new SearchContentParams(
+            language,
+            pathCriteria,
+            fieldSubCriteria.Count > 0 ? fieldSubCriteria : null,
+            IncludeOnlyOwnFields: true,
+            ExcludeStandardFields: true);
+
+        var items = await Client.SearchContentAsync(searchParams, CredentialsProviders);
+
+        return fieldFilters.Count > 0
+            ? FilterItemsByFieldPairs(items, fieldFilters).ToList()
+            : items;
+    }
+
+    private async Task<FileResponse> BuildHtmlFileAsync(ContentMetadata metadata, List<ContentWithFieldsEntity> entities, string itemName)
+    {
+        var html = FieldsToHtmlConverter.ConvertToHtml(metadata, entities);
+        var bytes = System.Text.Encoding.UTF8.GetBytes(html);
+        using var stream = new MemoryStream(bytes);
+        var fileRef = await fileManagementClient.UploadAsync(stream, "text/html", $"{itemName}.html");
+        return new() { Content = fileRef };
+    }
+
+    private async Task<string> ReadHtmlFromFileAsync(Blackbird.Applications.Sdk.Common.Files.FileReference fileReference)
+    {
+        await using var fileStream = await fileManagementClient.DownloadAsync(fileReference);
+        var bytes = await fileStream.GetByteData();
+        var htmlString = System.Text.Encoding.UTF8.GetString(bytes);
+
+        if (!Xliff2Serializer.IsXliff2(htmlString))
+            return htmlString;
+
+        var converted = Transformation.Parse(htmlString, fileReference.Name).Target().Serialize();
+        return converted ?? throw new PluginMisconfigurationException("XLIFF did not contain any files");
+    }
+
+    private static string ResolveContentId(ContentWithFieldsEntity entity, string? overrideContentId)
+    {
+        return entity.IsRootContent && !string.IsNullOrEmpty(overrideContentId)
+            ? overrideContentId
+            : entity.ContentId;
+    }
+
+    private async Task<int> EnsureTargetVersionAsync(string contentId, string targetLanguage)
+    {
+        var targetContent = await GetContent(new ContentRequest
+        {
+            ContentId = contentId,
+            Language = targetLanguage
+        });
+
+        if (targetContent.Version > 0)
+            return targetContent.Version;
+
+        var addedVersion = await Client.ExecuteGraphQlWithErrorHandling<AddItemVersionWrapperDto>(
+            new Request(CredentialsProviders).AddJsonBody(new
+            {
+                query = GraphQlMutations.AddItemVersionMutation(contentId, targetLanguage)
+            }));
+
+        return addedVersion.AddItemVersion.Item.Version;
+    }
+
+    private async Task UpdateItemFieldsAsync(string contentId, int targetVersion, ContentWithFieldsEntity entity, string targetLanguage)
+    {
+        var metadata = new ContentMetadata(contentId, targetVersion, entity.SourceLanguage, TargetLanguage: targetLanguage);
+        var apiRequest = new Request(CredentialsProviders)
+            .AddJsonBody(new { query = GraphQlMutations.UpdateItemMutation(metadata, entity.Fields) });
+
+        await Client.ExecuteGraphQlWithErrorHandling<UpdateItemWrapperDto>(apiRequest);
     }
     
     
@@ -289,20 +264,11 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
         return $"[{from} TO {to}]";
     }
 
-    private static IEnumerable<ContentResponse> FilterItemsByFields(IEnumerable<ContentResponse> items, IReadOnlyList<string> fieldNames, IReadOnlyList<string> fieldValues)
+    private static IEnumerable<ContentResponse> FilterItemsByFieldPairs(
+        IEnumerable<ContentResponse> items, IReadOnlyList<KeyValuePair<string, string>> fieldFilters)
     {
         return items.Where(item =>
-        {
-            for (var index = 0; index < fieldNames.Count; index++)
-            {
-                if (!SearchFieldValueMatcher.Matches(item.Fields.Nodes, fieldNames[index], fieldValues[index]))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        });
+            fieldFilters.All(f => SearchFieldValueMatcher.Matches(item.Fields.Nodes, f.Key, f.Value)));
     }
 
     private async Task<List<CriteriaDto>> BuildScopeCriteriaAsync(SearchContentRequest searchContentRequest, DateFilters dateFilters)

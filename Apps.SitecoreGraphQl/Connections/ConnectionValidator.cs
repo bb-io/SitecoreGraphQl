@@ -1,8 +1,5 @@
-using Apps.SitecoreGraphQl.Api;
-using Apps.SitecoreGraphQl.Constants;
 using Blackbird.Applications.Sdk.Common.Authentication;
 using Blackbird.Applications.Sdk.Common.Connections;
-using RestSharp;
 
 namespace Apps.SitecoreGraphQl.Connections;
 
