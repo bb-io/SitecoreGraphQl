@@ -187,7 +187,7 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
 
     private async Task<string> ReadHtmlFromFileAsync(Blackbird.Applications.Sdk.Common.Files.FileReference fileReference)
     {
-        var fileStream = await fileManagementClient.DownloadAsync(fileReference);
+        await using var fileStream = await fileManagementClient.DownloadAsync(fileReference);
         var bytes = await fileStream.GetByteData();
         var htmlString = System.Text.Encoding.UTF8.GetString(bytes);
 
