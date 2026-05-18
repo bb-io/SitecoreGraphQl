@@ -39,17 +39,17 @@ This application interacts directly with your Sitecore instance via the built-in
 
 ### For Sitecore XP
 
-To enable and configure the GraphQL endpoint and Identity Server authentication in your Sitecore XP environment, follow the official Sitecore guide:
+> **Note:** Enabling and configuring the GraphQL API in Sitecore XP is a multi-step process that involves Identity Server configuration, patch files, and API authorization setup. Allow time to work through this carefully.
 
-➡️ [Walkthrough: Enabling and authorizing requests to the Authoring and Management API](https://doc.sitecore.com/xp/en/developers/latest/sitecore-experience-manager/walkthrough--enabling-and-authorizing-requests-to-the-authoring-and-management-api.html)
+Two resources are available to guide you:
 
-To verify that the GraphQL API is configured properly, you can navigate to: `https://your-cm-instance.com/sitecore/api/authoring/graphql/ide/`
+1. **Official Sitecore documentation:** [Walkthrough: Enabling and authorizing requests to the Authoring and Management API](https://doc.sitecore.com/xp/en/developers/latest/sitecore-experience-manager/walkthrough--enabling-and-authorizing-requests-to-the-authoring-and-management-api.html)
 
-If everything is set up correctly, you should see the GraphQL interface.
+2. **Community example project:** [sitecore-xp-authoring-management-api-authorization](https://github.com/andiappan-ar/sitecore-xp-authoring-management-api-authorization) — an open-source project with a detailed step-by-step README and a working example implementation showing exactly how to enable and authorize the GraphQL Authoring and Management API in Sitecore XP. If you find the official documentation unclear, this is an excellent starting point.
 
-### For Sitecore XM Cloud
+To verify that the GraphQL API is configured properly, navigate to: `https://your-cm-instance.com/sitecore/api/authoring/graphql/ide/`
 
-Sitecore XM Cloud comes with GraphQL API enabled by default. No additional configuration is required.
+If everything is set up correctly, you should see the GraphQL IDE interface.
 
 ## Connecting
 
@@ -75,7 +75,6 @@ Navigate to apps and search for **Sitecore (GraphQL)** and click **Add Connectio
     - **Identity Server URL** — your Sitecore Identity Server URL (e.g., `https://identity.yourdomain.com`).
     - **Client ID** — OAuth2 Client ID configured in Identity Server.
     - **Client Secret** — OAuth2 Client Secret configured in Identity Server.
-    - **Scope (Optional)** — OAuth2 scope if required by your Identity Server configuration (e.g., `sitecore.api.authoring`). Leave empty if not required.
 3. Click **Connect** to establish the connection.
 4. Verify that connection was added successfully.
 
@@ -86,36 +85,46 @@ Once connected, you can begin using the available actions and events within your
 ### Content (items)
 
 - **Search content**  
-  Retrieve a list of Sitecore content items with pagination and language filtering.  
-  Sitecore GraphQL field filtering does not perform reliable exact value matching for text fields. Instead, it uses search/index-based matching, which may treat related terms such as `translate`, `translation`, and `translated` as equivalent.  
-  As a result, filtering by a specific field value such as `status = "in translation"` may return items with different but related values. This behavior comes from Sitecore GraphQL search itself and can vary depending on indexing and analyzers, so exact matching is not supported reliably through GraphQL alone.  
-  To ensure precise results, enable `Use exact field value filtering`. When enabled, the action uses Sitecore only for scope narrowing (`_path`, language, created/updated dates), fetches all items in that scope through pagination, and then applies exact normalized field-value filtering locally. Field matching is case-insensitive and uses either the field name or `templateField.key`. Leaving the parameter empty or `false` keeps the previous GraphQL-side behavior for backward compatibility.
+  Retrieve a list of Sitecore content items.  
+  **Inputs:** Language (required), Root path, Field names, Field values, Use exact field value filtering, Created after/before, Updated after/before.  
 
-- **Get content information**  
-  Retrieve detailed information for a specific content item by its ID.
+  > Sitecore GraphQL field filtering does not perform reliable exact value matching for text fields. Instead, it uses search/index-based matching, which may treat related terms such as `translate`, `translation`, and `translated` as equivalent. As a result, filtering by a specific field value such as `status = "in translation"` may return items with different but related values.  
+  > To ensure precise results, enable **Use exact field value filtering**. When enabled, the action uses Sitecore only for scope narrowing (`_path`, language, dates), fetches all matching items, and then applies exact case-insensitive field-value filtering locally. Leaving this option empty or `false` keeps the standard GraphQL-side behavior.
+
+- **Get content**  
+  Retrieve detailed information for a specific content item by its ID.  
+  **Inputs:** Content ID (required), Language, Version.
 
 - **Download content**  
-  Download the full content of a Sitecore item as an HTML file.  
-  This allows further processing, translation, or storage in localization systems.
-  It's possible to inlude child items into file as well by enabling `Include child items` option. Also, using filtering options you can specify which fields should be included in the downloaded HTML.
+  Download the content of a Sitecore item as an HTML file ready for translation.  
+  **Inputs:**
+  - **Content ID** (required), **Language** (required), **Version** — identify the source item and language version to download.
+  - **Include child items** — when enabled, child items are fetched and embedded in the same HTML file. Each child is preserved as a separate section so the upload action can write them back individually.
+  - **Field names** / **Field values** — used together to filter which child items are included (e.g. include only children where `status` = `translate`). Applies only when *Include child items* is enabled.
+  - **Exclude fields** — a list of field names to omit from the HTML output (e.g. `IsVerifiedStyle`, `Value`, `SortOrder`). Use this to strip non-translatable fields and keep the file clean for translators.
 
 - **Upload content**  
-  Upload translated or modified content back into Sitecore.  
-  Supports both **HTML** and **XLIFF 2.0/2.1/2.2** formats.  
-  If the specified version or language doesn’t exist, a new version is automatically created.
+  Upload translated content back into Sitecore.  
+  Supports both **HTML** (produced by *Download content*) and **XLIFF** formats.  
+  The action automatically resolves the correct version in the target language: if a version already exists it is updated in place; if no version exists yet a new one is created first.  
+  **Inputs:**
+  - **Content** (required) — the translated HTML or XLIFF file.
+  - **Target language** (required) — the language variant to write into (e.g. `nl-nl`, `de-de`).
+  - **Content ID** (optional) — override the root item ID from the file. Useful when the file was downloaded from one environment and is being uploaded to another.
 
 - **Delete content**  
-  Permanently delete a Sitecore content item by its ID.
+  Delete a Sitecore content item by its ID.  
+  **Inputs:** Content ID (required).
 
 ### Workflows
 
 - **Search workflows**  
-  Retrieve all configured workflows along with their states.  
-  This includes workflow IDs, display names, and available transitions.
+  Retrieve all configured workflows along with their states and available transitions.
 
 - **Update workflow state**  
-  Change the workflow state of a specific content item.  
-  Useful for automation scenarios such as moving items from “Ready for translation” to “In translation” or “Translation completed”.
+  Change the workflow state of a specific content item by executing a workflow command.  
+  Useful for automation scenarios such as moving items from *Ready for translation* to *In translation* or *Translation completed*.  
+  **Inputs:** Content ID (required), Language, Version, Workflow command ID (required).
 
 ## Events
 
