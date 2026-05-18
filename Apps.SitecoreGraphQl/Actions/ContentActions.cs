@@ -12,6 +12,7 @@ using Blackbird.Applications.Sdk.Common.Actions;
 using Blackbird.Applications.Sdk.Common.Exceptions;
 using Blackbird.Applications.Sdk.Common.Invocation;
 using Blackbird.Applications.SDK.Extensions.FileManagement.Interfaces;
+using Blackbird.Applications.Sdk.Utils.Extensions.Files;
 using Blackbird.Filters.Transformations;
 using Blackbird.Filters.Xliff.Xliff2;
 using RestSharp;
@@ -187,9 +188,8 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
     private async Task<string> ReadHtmlFromFileAsync(Blackbird.Applications.Sdk.Common.Files.FileReference fileReference)
     {
         var fileStream = await fileManagementClient.DownloadAsync(fileReference);
-        var memoryStream = new MemoryStream();
-        await fileStream.CopyToAsync(memoryStream);
-        var htmlString = System.Text.Encoding.UTF8.GetString(memoryStream.ToArray());
+        var bytes = await fileStream.GetByteData();
+        var htmlString = System.Text.Encoding.UTF8.GetString(bytes);
 
         if (!Xliff2Serializer.IsXliff2(htmlString))
             return htmlString;

@@ -47,11 +47,11 @@ public class Request(IEnumerable<AuthenticationCredentialsProvider> creds)
             var errorMessage = string.IsNullOrEmpty(response.Content)
                 ? response.ErrorMessage ?? "Unknown error"
                 : response.Content;
-            throw new Exception($"Error obtaining XM Cloud access token: {response.StatusCode} - {errorMessage}");
+            throw new PluginApplicationException($"Error obtaining XM Cloud access token: {response.StatusCode} - {errorMessage}");
         }
         
         var tokenResponse = JsonConvert.DeserializeObject<AuthTokenDto>(response.Content!)
-            ?? throw new Exception("Failed to deserialize XM Cloud authentication token response.");
+            ?? throw new PluginApplicationException("Failed to deserialize XM Cloud authentication token response.");
         
         return tokenResponse.AccessToken;
     }
