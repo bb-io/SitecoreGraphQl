@@ -21,7 +21,7 @@ public class BaseContentResponse
     public ItemWorkflowResponse WorkflowInfo { get; set; } = new();
 
     [Display("Language information"), JsonProperty("language")]
-    public LanguageWrapperResponse Language { get; set; }
+    public LanguageWrapperResponse Language { get; set; } = new();
 
     [DefinitionIgnore]
     public FieldsResponse Fields { get; set; } = new();

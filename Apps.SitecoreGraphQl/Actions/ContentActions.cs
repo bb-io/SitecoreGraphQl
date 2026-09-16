@@ -1,4 +1,4 @@
-using Apps.SitecoreGraphQl.Api;
+﻿using Apps.SitecoreGraphQl.Api;
 using Apps.SitecoreGraphQl.Constants;
 using Apps.SitecoreGraphQl.Models.Dtos;
 using Apps.SitecoreGraphQl.Models.Requests;
@@ -145,8 +145,9 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
 
     private static ContentWithFieldsEntity ToContentEntity(ContentResponse item, FilteringOptions filteringOptions, bool isRoot)
     {
-        var fields = filteringOptions.ApplyFilteringOptions(item.Fields.Nodes);
-        return new ContentWithFieldsEntity(item.Id, item.Version, item.Language.Name, fields, IsRootContent: isRoot);
+        // Sitecore returns `fields: null` for some items instead of an empty collection.
+        var fields = filteringOptions.ApplyFilteringOptions(item.Fields?.Nodes ?? new List<FieldResponse>());
+        return new ContentWithFieldsEntity(item.Id, item.Version, item.Language?.Name ?? string.Empty, fields, IsRootContent: isRoot);
     }
 
     private async Task<List<ContentResponse>> FetchChildItemsAsync(
@@ -162,12 +163,16 @@ public class ContentActions(InvocationContext invocationContext, IFileManagement
             .Select(f => new CriteriaDto { Field = f.Key, CriteriaType = "WILDCARD", Operator = "MUST", Value = f.Value })
             .ToList();
 
+        if (request.ChildItemsLimit is <= 0)
+            throw new PluginMisconfigurationException("Child items limit must be greater than zero.");
+
         var searchParams = new SearchContentParams(
             language,
             pathCriteria,
             fieldSubCriteria.Count > 0 ? fieldSubCriteria : null,
             IncludeOnlyOwnFields: true,
-            ExcludeStandardFields: true);
+            ExcludeStandardFields: true,
+            Limit: request.ChildItemsLimit);
 
         var items = await Client.SearchContentAsync(searchParams, CredentialsProviders);
 

@@ -1,4 +1,4 @@
-using Apps.SitecoreGraphQl.Models.Dtos;
+﻿using Apps.SitecoreGraphQl.Models.Dtos;
 
 namespace Apps.SitecoreGraphQl.Models.Records;
 
@@ -9,4 +9,5 @@ public record SearchContentParams(
     List<SortDto>? Sort = null, 
     bool IncludeOnlyOwnFields = false, 
     bool ExcludeStandardFields = false, 
-    bool AutoPagination = true);
+    bool AutoPagination = true,
+    int? Limit = null);
