@@ -1,4 +1,4 @@
-using Apps.SitecoreGraphQl.Models.Dtos;
+﻿using Apps.SitecoreGraphQl.Models.Dtos;
 using Apps.SitecoreGraphQl.Models.Records;
 using Apps.SitecoreGraphQl.Models.Responses;
 using Apps.SitecoreGraphQl.Constants;
@@ -7,6 +7,7 @@ using Blackbird.Applications.Sdk.Common.Authentication;
 using Blackbird.Applications.Sdk.Common.Exceptions;
 using Blackbird.Applications.Sdk.Utils.RestSharp;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RestSharp;
 
 namespace Apps.SitecoreGraphQl.Api;
@@ -17,6 +18,8 @@ public class Client(List<AuthenticationCredentialsProvider> creds) : BlackBirdRe
     ThrowOnAnyError = false
 }) 
 {
+    private const int DefaultPageSize = 100;
+
     public async Task<T> ExecuteGraphQlWithErrorHandling<T>(RestRequest request)
     {
         var response = await ExecuteWithErrorHandling(request);
@@ -27,12 +30,13 @@ public class Client(List<AuthenticationCredentialsProvider> creds) : BlackBirdRe
     public async Task<List<ContentResponse>> SearchContentAsync(SearchContentParams searchParams, IEnumerable<AuthenticationCredentialsProvider> credentialsProviders)
     {
         var allItems = new List<ContentResponse>();
-        var pageSize = 100;
+        var limit = searchParams.Limit;
         var pageIndex = 0;
         var totalCount = 0;
         
         do
         {
+            var pageSize = limit.HasValue ? Math.Min(DefaultPageSize, limit.Value - allItems.Count) : DefaultPageSize;
             var apiRequest = new Request(credentialsProviders);
             
             if (searchParams.Criteria != null && searchParams.Criteria.Count > 0)
@@ -71,6 +75,11 @@ public class Client(List<AuthenticationCredentialsProvider> creds) : BlackBirdRe
             var searchResult = await ExecuteGraphQlWithErrorHandling<SearchItemsWrapperDto>(apiRequest);
             totalCount = searchResult.Search.TotalCount;
             
+            if (searchResult.Search.Results.Count == 0)
+            {
+                break;
+            }
+            
             foreach (var item in searchResult.Search.Results)
             {
                 if (item.InnerItem != null)
@@ -93,7 +102,9 @@ public class Client(List<AuthenticationCredentialsProvider> creds) : BlackBirdRe
             
             pageIndex++;
             
-        } while (searchParams.AutoPagination && allItems.Count < totalCount);
+        } while (searchParams.AutoPagination
+                 && allItems.Count < totalCount
+                 && (!limit.HasValue || allItems.Count < limit.Value));
 
         return allItems;
     }
@@ -101,8 +112,8 @@ public class Client(List<AuthenticationCredentialsProvider> creds) : BlackBirdRe
     public override async Task<RestResponse> ExecuteWithErrorHandling(RestRequest request)
     {
         var response = await base.ExecuteWithErrorHandling(request);
-        var graphQlResponse = JsonConvert.DeserializeObject<GraphQlResponseDto<object>>(response.Content!);
-        if (graphQlResponse != null && graphQlResponse.Errors.Count > 0)
+        var graphQlResponse = JsonConvert.DeserializeObject<GraphQlResponseDto<JObject>>(response.Content!);
+        if (graphQlResponse != null && graphQlResponse.Errors.Count > 0 && !graphQlResponse.HasData())
         {
             throw new PluginApplicationException(graphQlResponse.GetErrorMessages());
         }
