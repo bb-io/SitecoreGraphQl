@@ -1,5 +1,4 @@
-﻿using Apps.SitecoreGraphQl.Api;
-using Apps.SitecoreGraphQl.Models.Dtos;
+﻿using Apps.SitecoreGraphQl.Models.Dtos;
 using Apps.SitecoreGraphQl.Models.Records;
 using Apps.SitecoreGraphQl.Models.Requests;
 using Blackbird.Applications.Sdk.Common;
@@ -41,6 +40,6 @@ public class ContentDataSource(InvocationContext invocationContext, [ActionParam
         );
         
         var contentResponse = await Client.SearchContentAsync(searchParams, CredentialsProviders);
-        return contentResponse.Select(content => new DataSourceItem(content.Id, content.Name));
+        return contentResponse.DistinctBy(c => c.Id).Select(content => new DataSourceItem(content.Id, content.Name));
     }
 }
